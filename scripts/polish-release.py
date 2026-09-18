@@ -36,6 +36,12 @@ if 'scene.userData.usePhotoHDR' not in s:
     s=s.replace('result.environment=traceEnvironment;result.background=traceEnvironment;', 'result.environment=scene.userData.usePhotoHDR?scene.userData.photoEnvironment:traceEnvironment;result.background=result.environment;result.backgroundIntensity=.65;result.environmentIntensity=.85;')
     p.write_text(s)
 p=root/'realism.js';s=p.read_text().replace('i+=4){tree.getMatrixAt','i+=6){tree.getMatrixAt')
-s=s.replace('if(useHDR)suns.forEach(l=>{l.target.position.copy(position);', "if(useHDR){hemi.forEach(l=>l.intensity=.6);suns.forEach(l=>{l.intensity=3.5;l.color.setHex(0xfff5e5);});}\n    if(useHDR)suns.forEach(l=>{l.target.position.copy(position);") if 'if(useHDR){hemi.forEach' not in s else s
+if '// REFRESH_HDR_LIGHTS' not in s:
+    s=s.replace('if(useHDR)suns.forEach(l=>{l.target.position.copy(position);', "// REFRESH_HDR_LIGHTS: atmosphere.apply also runs for unrelated settings.\n    if(useHDR){hemi.forEach(l=>l.intensity=.6);suns.forEach(l=>{l.intensity=3.5;l.color.setHex(0xfff5e5);});}\n    if(useHDR)suns.forEach(l=>{l.target.position.copy(position);")
+if 'const treeCells=' not in s:
+    s=s.replace("  gltf.scene.traverse(o=>{if(!o.isMesh)return;", "  // Separate instance bounds let the GPU skip whole offscreen tree clusters.\n  const treeCells=new Map();for(const v of placements){const key=Math.floor(v.position.x/180)+':'+Math.floor(v.position.z/180);if(!treeCells.has(key))treeCells.set(key,[]);treeCells.get(key).push(v);}\n  gltf.scene.traverse(o=>{if(!o.isMesh)return;")
+    s=s.replace('const mesh=new THREE.InstancedMesh(geometry,o.material,placements.length);', 'for(const cluster of treeCells.values()){const mesh=new THREE.InstancedMesh(geometry,o.material,cluster.length);')
+    s=s.replace('placements.forEach((v,i)=>{dummy.position.copy(v.position);', 'cluster.forEach((v,i)=>{dummy.position.copy(v.position);')
+    s=s.replace('mesh.computeBoundingSphere();naturalTrees.add(mesh);', 'mesh.computeBoundingSphere();naturalTrees.add(mesh);}')
 p.write_text(s)
-print('Photographic lighting, rendering and collision refinements applied')
+print('Photographic lighting, spatial vegetation culling and collision refinements applied')
