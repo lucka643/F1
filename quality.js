@@ -16,7 +16,7 @@ export function createQualityPipeline(renderer, scene, camera, track, car, setti
   const coarse = matchMedia('(pointer:coarse)').matches;
   const hdr = !!renderer.extensions.get('EXT_color_buffer_float');
   const cubeTarget = new THREE.WebGLCubeRenderTarget(128, {type: hdr ? THREE.HalfFloatType : THREE.UnsignedByteType, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter});
-  const probe = new THREE.CubeCamera(.15, 850, cubeTarget);
+  const probe = new THREE.CubeCamera(.15, 6500, cubeTarget);
   const originalEnvironment = scene.environment;
   const photoBar = document.createElement('div'); photoBar.id='photo-bar'; photoBar.hidden=true;
   photoBar.innerHTML='<span id="photo-state" role="status">Preparing ray tracing…</span><button id="photo-save">Save photo</button><button id="photo-close">Return to driving</button>';
@@ -73,7 +73,7 @@ export function createQualityPipeline(renderer, scene, camera, track, car, setti
     const result=new THREE.Scene(),origin=car.root.position,temp=new THREE.Matrix4(),world=new THREE.Matrix4(),p=new THREE.Vector3();
     scene.updateMatrixWorld(true);
     scene.traverseVisible(o=>{
-      if(o.isDirectionalLight){const light=o.clone();light.position.setFromMatrixPosition(o.matrixWorld);light.target.position.setFromMatrixPosition(o.target.matrixWorld);result.add(light,light.target);return;}
+      if(o.isDirectionalLight){if(scene.userData.usePhotoHDR)return;const light=o.clone();light.position.setFromMatrixPosition(o.matrixWorld);light.target.position.setFromMatrixPosition(o.target.matrixWorld);result.add(light,light.target);return;}
       if(o.isPointLight||o.isSpotLight){p.setFromMatrixPosition(o.matrixWorld);if(p.distanceTo(origin)<130){const light=o.clone();light.position.copy(p);result.add(light);}return;}
       if(!o.isMesh||!o.geometry)return;
       const materials=Array.isArray(o.material)?o.material:[o.material];
@@ -86,7 +86,7 @@ export function createQualityPipeline(renderer, scene, camera, track, car, setti
     traceEnvironment=new traceModule.GradientEquirectTexture(256);
     traceEnvironment.topColor.set(night?0x14243e:sunset?0x8195ad:0x8fc4e9);
     traceEnvironment.bottomColor.set(night?0x10141b:sunset?0xc7a285:0x6e7761);traceEnvironment.exponent=1;traceEnvironment.update();
-    result.environment=traceEnvironment;result.background=traceEnvironment;
+    result.environment=scene.userData.usePhotoHDR?scene.userData.photoEnvironment:traceEnvironment;result.background=result.environment;result.backgroundIntensity=.65;result.environmentIntensity=.85;
     return result;
   }
   async function enterPhoto() {

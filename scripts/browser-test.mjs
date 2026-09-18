@@ -16,7 +16,9 @@ async function instrument(context){
   return page;
 }
 async function health(page){return page.evaluate(()=>window.__F1.health());}
-async function settle(page,ms=500){await page.waitForTimeout(ms);const h=await health(page);assert(!h.failed,'Game entered failure state');assert(h.position.every(Number.isFinite));return h;}
+async function settle(page,ms=500){await page.waitForTimeout(ms);
+  // WAIT_FOR_RENDERED_FRAMES: preserve assertions while waiting for the actual view update.
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));const h=await health(page);assert(!h.failed,'Game entered failure state');assert(h.position.every(Number.isFinite));return h;}
 async function shot(page,name){await page.screenshot({path:`${dir}/${name}.png`,timeout:120000});}
 async function test(name,fn){current=name;const start=Date.now(),before=errors.length;console.log('START',name);try{const data=await fn();assert.equal(errors.length,before,'Browser errors in this test');results.push({name,passed:true,seconds:(Date.now()-start)/1000,data});console.log('PASS',name);}catch(e){results.push({name,passed:false,seconds:(Date.now()-start)/1000,error:e.stack||e.message});console.error('FAIL',name,e.message);}}
 const context=await browser.newContext({viewport:{width:960,height:540},deviceScaleFactor:1});
@@ -44,7 +46,7 @@ try{
   });
   await test('All six camera presets render',async()=>{
     const cameras={};for(const camera of ['chase','close','tv','cockpit','nose','top']){await page.evaluate(camera=>__F1Test.settings({camera}),camera);cameras[camera]=(await settle(page,500)).camera;}
-    assert(Math.hypot(...cameras.top.map((v,i)=>v-cameras.chase[i]))>5);
+    assert(Math.hypot(...cameras.top.map((v,i)=>v-cameras.chase[i]))>5,JSON.stringify(cameras));
     await page.evaluate(()=>__F1Test.settings({camera:'chase'}));return cameras;
   });
   await test('Stationary orbit persists and driving restores the camera',async()=>{

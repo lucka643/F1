@@ -7,15 +7,17 @@ import { createCarVisual, WHEEL_CENTERS } from './car.js';
 import { createEnvironment } from './environment.js';
 import { createQualityPipeline } from './quality.js';
 import { addSceneryDetail } from './scenery.js';
+import { createRealism } from './realism.js';
 
 const $ = id => document.getElementById(id);
 const clamp = THREE.MathUtils.clamp;
 const coarse = matchMedia('(pointer: coarse)').matches;
-const defaults = {camera:'chase',fov:65,distance:11,quality:coarse?'medium':'high',maxSpeed:330,grip:1,downforce:1,steering:1,assist:true,weather:'clear',time:'day',sound:true,showFPS:false};
+const defaults = {camera:'chase',fov:58,distance:7.5,quality:coarse?'medium':'high',maxSpeed:330,grip:1,downforce:1,steering:1,assist:true,weather:'clear',time:'day',sound:true,showFPS:false};
 const options = {camera:['chase','close','tv','cockpit','nose','top'],quality:['simple','medium','high','ultra'],weather:['clear','rain','snow','fog'],time:['day','sunset','night']};
 const ranges = {fov:[40,100],distance:[5,18],maxSpeed:[100,420],grip:[.5,2.5],downforce:[0,2.5],steering:[.4,1.6]};
 let saved = {};
 try { saved = JSON.parse(localStorage.getItem('f1-highway-preview-settings') || '{}') || {}; } catch {}
+if(saved.fov===65&&saved.distance===11){saved.fov=58;saved.distance=7.5;}
 const settings = {...defaults};
 for (const key of Object.keys(defaults)) {
   const value = saved[key];
@@ -50,6 +52,8 @@ const track = await createTrack(scene,world,R);
 const atmosphere = createEnvironment(scene,renderer,track);
 const car = createCarVisual(scene,notice);
 const details = addSceneryDetail(scene,track);
+$('load-message').textContent='Loading scanned surfaces, sky and vegetation…';
+const realism = await createRealism(scene,renderer,track,settings,notice);
 const quality = createQualityPipeline(renderer,scene,camera,track,car,settings,notice);
 
 // A dynamic chassis with four independently ray-cast suspension springs.
@@ -180,7 +184,7 @@ function updateCamera(dt){
       case 'cockpit':cameraPosition.set(.01,.72,.4);cameraTarget.set(0,.62,17);break;
       case 'nose':cameraPosition.set(0,.14,2.86);cameraTarget.set(0,.14,24);break;
       case 'top':cameraPosition.set(.01,33,-.3);cameraTarget.set(0,0,1);break;
-      default:cameraPosition.set(0,2.7+Math.min(speed*.014,1.3),-settings.distance);cameraTarget.set(0,.4,3+speed*.025);
+      default:cameraPosition.set(0,1.9+Math.min(speed*.009,.9),-settings.distance);cameraTarget.set(0,.4,3+speed*.025);
     }
     cameraPosition.applyQuaternion(rotation).add(position);cameraTarget.applyQuaternion(rotation).add(position);
     const alpha=resetCamera?1:1-Math.exp(-dt*8);
@@ -190,7 +194,7 @@ function updateCamera(dt){
     resetCamera=false;
   }
   orbit.enabled=canOrbit;
-  if(canOrbit){if(orbitActive)orbit.target.copy(target);orbit.update();}
+  if(canOrbit&&orbitActive){orbit.target.copy(target);orbit.update();}
 
   // Move the camera closer when a static barrier blocks the line of sight.
   cameraDirection.copy(camera.position).sub(orbit.target);const distance=cameraDirection.length();
@@ -285,7 +289,7 @@ function frame(now){
     const paused=isPaused();
     if(!paused&&!qaManual){accumulator=Math.min(accumulator+delta,STEP*12);let steps=0;while(accumulator>=STEP&&steps<12){simulate(STEP);accumulator=Math.max(0,accumulator-STEP);steps++;}}else accumulator=0;
     readBody();car.root.position.copy(position);car.root.quaternion.copy(rotation);car.sync(suspension,steer,signedSpeed,paused?0:delta,Array.from({length:4},(_,i)=>vehicle.wheelRotation(i)));car.speed=signedSpeed;
-    updateCamera(delta);atmosphere.update(paused?0:delta,position,elapsed);details.update(paused?0:delta,car.root,velocity,settings);
+    updateCamera(delta);atmosphere.update(paused?0:delta,position,elapsed);details.update(paused?0:delta,car.root,velocity,settings);realism.update(position);
     car.rearLight.visible=settings.weather!=='clear'||Math.floor(elapsed*5)%2===0;
     const kmh=Math.abs(signedSpeed)*3.6,gear=signedSpeed<-1?'R':kmh<2?'N':String(Math.min(8,1+Math.floor(kmh/43)));
     const revs=gear==='N'?.15+gas*.5:.2+(kmh%43)/43*.65+gas*.15;

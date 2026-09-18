@@ -10,12 +10,16 @@ export async function createRealism(scene,renderer,track,settings,notice){
   async function texture(name,color=false,repeat=1){const t=await loader.loadAsync(new URL(name,base).href);t.colorSpace=color?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.setScalar(repeat);t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());textures.push(t);return t;}
   async function surface(key,repeat=1){const f=manifest.files[key];return{map:await texture(f.diff,true,repeat),normalMap:await texture(f.nor_gl,false,repeat),roughnessMap:await texture(f.rough,false,repeat)};}
   const [asphalt,grass,concrete,hdr]=await Promise.all([surface('asphalt',.8),surface('grass',1900),surface('concrete',4),new RGBELoader().loadAsync(new URL(manifest.files.sky,base).href)]);
+  // TURF_ALBEDO: recolor the moss scan and reduce repeating large color patches.
+  const turf=document.createElement('canvas');turf.width=grass.map.image.width;turf.height=grass.map.image.height;const tc=turf.getContext('2d');tc.drawImage(grass.map.image,0,0);const pixels=tc.getImageData(0,0,turf.width,turf.height);
+  for(let i=0;i<pixels.data.length;i+=4){pixels.data[i]=25+pixels.data[i]*.4;pixels.data[i+1]=45+pixels.data[i+1]*.55;pixels.data[i+2]=22+pixels.data[i+2]*.65;}
+  tc.putImageData(pixels,0,0);grass.map.image=turf;grass.map.needsUpdate=true;
   hdr.mapping=THREE.EquirectangularReflectionMapping;
   const pmrem=new THREE.PMREMGenerator(renderer),environment=pmrem.fromEquirectangular(hdr);pmrem.dispose();scene.environment=environment.texture;scene.environmentIntensity=.85;scene.userData.photoEnvironment=hdr;
   const oldRoadTextures=new Set([track.roadMaterial.map,track.roadMaterial.bumpMap,track.roadMaterial.roughnessMap]);
   Object.assign(track.roadMaterial,asphalt);track.roadMaterial.bumpMap=null;track.roadMaterial.normalScale.set(.38,.38);track.roadMaterial.needsUpdate=true;track.asphalt=asphalt.map;
   for(const t of oldRoadTextures)if(t)t.dispose();
-  Object.assign(track.grassMaterial,grass);track.grassMaterial.normalScale.set(.5,.5);track.grassMaterial.needsUpdate=true;
+  Object.assign(track.grassMaterial,grass);track.grassMaterial.normalScale.set(.18,.18);track.grassMaterial.needsUpdate=true;
   const banksMap=grass.map.clone(),banksNormal=grass.normalMap.clone(),banksRough=grass.roughnessMap.clone();for(const t of [banksMap,banksNormal,banksRough]){t.repeat.set(1,1);t.needsUpdate=true;}
   const pos=track.banks.geometry.attributes.position,uv=[];for(let i=0;i<pos.count;i++)uv.push(pos.getX(i)*.3,pos.getZ(i)*.3);track.banks.geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));Object.assign(track.banks.material,{map:banksMap,normalMap:banksNormal,roughnessMap:banksRough});track.banks.material.normalScale.set(.35,.35);track.banks.material.needsUpdate=true;
   const oldTrees=[],sky=[],hemi=[],suns=[];
@@ -36,9 +40,11 @@ export async function createRealism(scene,renderer,track,settings,notice){
   const gltf=await new GLTFLoader().setDRACOLoader(decoder).loadAsync(new URL(manifest.files.tree,base).href);decoder.dispose();gltf.scene.updateMatrixWorld(true);
   const bounds=new THREE.Box3().setFromObject(gltf.scene),center=bounds.getCenter(new THREE.Vector3()),height=bounds.max.y-bounds.min.y;
   const placements=[],matrix=new THREE.Matrix4(),p=new THREE.Vector3(),q=new THREE.Quaternion(),scale=new THREE.Vector3(),dummy=new THREE.Object3D();
-  for(const tree of oldTrees)for(let i=0;i<tree.count;i+=4){tree.getMatrixAt(i,matrix);matrix.decompose(p,q,scale);if(scale.y<.1)continue;placements.push({position:new THREE.Vector3(p.x,p.y-scale.y/2,p.z),height:scale.y,yaw:rand()*Math.PI*2});}
-  gltf.scene.traverse(o=>{if(!o.isMesh)return;const geometry=o.geometry.clone().applyMatrix4(o.matrixWorld);geometry.translate(-center.x,-bounds.min.y,-center.z);const mesh=new THREE.InstancedMesh(geometry,o.material,placements.length);mesh.castShadow=true;mesh.receiveShadow=true;
-    placements.forEach((v,i)=>{dummy.position.copy(v.position);dummy.rotation.set(0,v.yaw,0);dummy.scale.setScalar(v.height/Math.max(.1,height));dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);mesh.setColorAt(i,new THREE.Color().setRGB(.85+rand()*.15,.88+rand()*.12,.82+rand()*.18));});mesh.computeBoundingSphere();naturalTrees.add(mesh);
+  for(const tree of oldTrees)for(let i=0;i<tree.count;i+=6){tree.getMatrixAt(i,matrix);matrix.decompose(p,q,scale);if(scale.y<.1)continue;placements.push({position:new THREE.Vector3(p.x,p.y-scale.y/2,p.z),height:scale.y,yaw:rand()*Math.PI*2});}
+  // Separate instance bounds let the GPU skip whole offscreen tree clusters.
+  const treeCells=new Map();for(const v of placements){const key=Math.floor(v.position.x/180)+':'+Math.floor(v.position.z/180);if(!treeCells.has(key))treeCells.set(key,[]);treeCells.get(key).push(v);}
+  gltf.scene.traverse(o=>{if(!o.isMesh)return;const geometry=o.geometry.clone().applyMatrix4(o.matrixWorld);geometry.translate(-center.x,-bounds.min.y,-center.z);for(const cluster of treeCells.values()){const mesh=new THREE.InstancedMesh(geometry,o.material,cluster.length);mesh.castShadow=true;mesh.receiveShadow=true;
+    cluster.forEach((v,i)=>{dummy.position.copy(v.position);dummy.rotation.set(0,v.yaw,0);dummy.scale.setScalar(v.height/Math.max(.1,height));dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);mesh.setColorAt(i,new THREE.Color().setRGB(.85+rand()*.15,.88+rand()*.12,.82+rand()*.18));});mesh.computeBoundingSphere();naturalTrees.add(mesh);}
   });
   gltf.scene.traverse(o=>{if(o.geometry)o.geometry.dispose();});
   // A distant terrain ring removes the artificial flat horizon without altering the roadway.
@@ -49,12 +55,17 @@ export async function createRealism(scene,renderer,track,settings,notice){
   function update(position){
     const detailed=settings.quality==='high'||settings.quality==='ultra',day=settings.time==='day',clear=settings.weather==='clear';
     naturalTrees.visible=detailed;oldTrees.forEach(o=>o.visible=!detailed);
+    // Keep road reflectance in asphalt range instead of overexposed concrete white.
+    track.roadMaterial.color.setHex(settings.weather==='snow'?0xe1e4e7:settings.weather==='rain'?0x687583:0x9ca3aa);
+    track.grassMaterial.color.setHex(settings.weather==='snow'?0xf2f4f5:0xc4ceba);track.banks.material.color.setHex(settings.weather==='snow'?0xe3e8ea:0xb6c0ac);
     const useHDR=detailed&&day&&clear,condition=[settings.quality,settings.time,settings.weather].join(':');
     if(condition!==previous){previous=condition;scene.background=useHDR?hdr:null;scene.backgroundIntensity=useHDR?.65:1;sky.forEach(o=>o.visible=!useHDR);scene.userData.usePhotoHDR=useHDR;
       if(useHDR){hemi.forEach(l=>l.intensity=.6);suns.forEach(l=>{l.intensity=3.5;l.color.setHex(0xfff5e5);});}
       scene.environmentIntensity=settings.time==='night'?.23:settings.weather==='rain'?.55:.85;
       textures.forEach(t=>t.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),settings.quality==='ultra'?16:8));
     }
+    // REFRESH_HDR_LIGHTS: atmosphere.apply also runs for unrelated settings.
+    if(useHDR){hemi.forEach(l=>l.intensity=.6);suns.forEach(l=>{l.intensity=3.5;l.color.setHex(0xfff5e5);});}
     if(useHDR)suns.forEach(l=>{l.target.position.copy(position);l.position.copy(position).addScaledVector(sunDirection,95);l.target.updateMatrixWorld();});
   }
   update(track.start);notice('Scanned surfaces, sky and natural vegetation loaded',4000);

@@ -1,19 +1,19 @@
 {
-  "testedAt": "2026-09-18T05:55:00.174Z",
+  "testedAt": "2026-09-18T06:36:44.300Z",
   "browser": "Playwright Chromium 1.55.1; Linux; ANGLE SwiftShader software GPU",
   "note": "This checks correctness, not real-device frame rate. iPhone Safari has not been physically tested.",
   "tests": [
     {
       "name": "Self-hosted boot and RB19 loading",
       "passed": true,
-      "seconds": 21.288,
+      "seconds": 41.577,
       "data": {
         "version": "1.0",
         "ready": true,
         "failed": false,
         "position": [
           573.7999877929688,
-          0.7883476614952087,
+          0.7883791923522949,
           -87.4999008178711
         ],
         "rotation": [
@@ -23,11 +23,11 @@
           -3.2130804961116866e-11
         ],
         "velocity": [
-          -4.0463838502091676e-8,
-          -0.036062564700841904,
-          0.00008557357068639249
+          -9.378767629186768e-8,
+          -0.035790447145700455,
+          0.00006503797339973971
         ],
-        "speed": -0.00040147328334044785,
+        "speed": -0.00032684031752318495,
         "steer": 0,
         "up": 0.9999997411640158,
         "contacts": [
@@ -37,28 +37,28 @@
           true
         ],
         "suspension": [
-          0.22712379693984985,
-          0.22712379693984985,
-          0.22457677125930786,
-          0.22457677125930786
+          0.22715306282043457,
+          0.22715306282043457,
+          0.22460609674453735,
+          0.22460609674453735
         ],
         "wheelAngles": [
-          -0.0009484812617301941,
-          -0.0009484807960689068,
-          -0.0009531614487059414,
-          -0.0009531613322906196
+          -0.0010370387462899089,
+          -0.001037037931382656,
+          -0.0010413447162136436,
+          -0.001041344483383
         ],
         "wheelLoads": [
-          1867.5322265625,
-          1867.5318603515625,
-          2063.90869140625,
-          2063.908203125
+          1864.143798828125,
+          1864.1419677734375,
+          2059.796630859375,
+          2059.794677734375
         ],
         "model": "standard",
         "settings": {
           "camera": "chase",
-          "fov": 65,
-          "distance": 11,
+          "fov": 58,
+          "distance": 7.5,
           "quality": "simple",
           "maxSpeed": 330,
           "grip": 1,
@@ -73,26 +73,26 @@
         "photo": false,
         "samples": 0,
         "camera": [
-          573.7999877422825,
-          3.4805880793830526,
-          -76.497942056629
+          573.7999877535927,
+          2.682994665159,
+          -79.99853460450154
         ],
         "orbit": false,
         "ground": 0.1875,
         "render": {
-          "calls": 12,
-          "triangles": 183185
+          "calls": 13,
+          "triangles": 203185
         },
         "memory": {
-          "geometries": 13,
-          "textures": 10
+          "geometries": 14,
+          "textures": 17
         }
       }
     },
     {
       "name": "Keyboard acceleration, wheel spin and reset",
       "passed": true,
-      "seconds": 5.865,
+      "seconds": 11.624,
       "data": {
         "driving": {
           "version": "1.0",
@@ -100,23 +100,23 @@
           "failed": false,
           "position": [
             573.7999877929688,
-            0.7882043123245239,
+            0.7882039546966553,
             -88.6875991821289
           ],
           "rotation": [
-            2.2673216637514315e-9,
+            1.349945433215538e-10,
             0.9999958872795105,
-            0.002858090680092573,
-            2.1275337394599525e-11
+            0.002858096035197377,
+            1.5482927440135796e-10
           ],
           "velocity": [
-            5.369165734236958e-8,
-            -0.03726557269692421,
-            -5.676202774047852
+            4.253246643770581e-8,
+            -0.0372718945145607,
+            -5.676223278045654
           ],
-          "speed": 20.433226967287624,
+          "speed": 20.4333006489369,
           "steer": 0,
-          "up": 0.9999836626353288,
+          "up": 0.9999836625741072,
           "contacts": [
             true,
             true,
@@ -124,28 +124,28 @@
             true
           ],
           "suspension": [
-            0.23581862449645996,
-            0.23581862449645996,
-            0.2156272530555725,
-            0.2156272530555725
+            0.23581838607788086,
+            0.23581838607788086,
+            0.21562695503234863,
+            0.21562695503234863
           ],
           "wheelAngles": [
-            3.1664979457855225,
-            3.1664979457855225,
-            3.166642665863037,
-            3.166642665863037
+            3.1664371490478516,
+            3.1664371490478516,
+            3.166581630706787,
+            3.166581630706787
           ],
           "wheelLoads": [
-            1201.2764892578125,
-            1201.279296875,
-            2755.919189453125,
-            2755.922119140625
+            1201.32373046875,
+            1201.3272705078125,
+            2755.97265625,
+            2755.976318359375
           ],
           "model": "standard",
           "settings": {
             "camera": "chase",
-            "fov": 65,
-            "distance": 11,
+            "fov": 58,
+            "distance": 7.5,
             "quality": "simple",
             "maxSpeed": 330,
             "grip": 1,
@@ -160,19 +160,19 @@
           "photo": false,
           "samples": 0,
           "camera": [
-            573.7999878044786,
-            3.493112862848145,
-            -77.35311678780705
+            573.7999877975263,
+            2.6890785390560206,
+            -80.85747630534674
           ],
           "orbit": false,
           "ground": 0.1875,
           "render": {
-            "calls": 13,
-            "triangles": 183197
+            "calls": 14,
+            "triangles": 203197
           },
           "memory": {
-            "geometries": 13,
-            "textures": 10
+            "geometries": 14,
+            "textures": 17
           }
         },
         "reset": {
@@ -181,28 +181,28 @@
           "failed": false,
           "position": [
             573.7999877929688,
-            1.087499976158142,
-            -87.54756927490234
+            0.890591561794281,
+            -88.26114654541016
           ],
           "rotation": [
             0,
             1,
             0,
-            4.430073061861828e-12
+            1.253973036519085e-10
           ],
           "velocity": [
             0,
-            0,
+            -1.9573179483413696,
             0
           ],
           "speed": 0,
           "steer": 0,
           "up": 1,
           "contacts": [
-            true,
-            true,
-            true,
-            true
+            false,
+            false,
+            false,
+            false
           ],
           "suspension": [
             0.25,
@@ -211,22 +211,22 @@
             0.25
           ],
           "wheelAngles": [
-            3.1664979457855225,
-            3.1664979457855225,
-            3.166642665863037,
-            3.166642665863037
+            5.843306064605713,
+            5.843306064605713,
+            5.843463897705078,
+            5.843463897705078
           ],
           "wheelLoads": [
-            1201.2764892578125,
-            1201.279296875,
-            2755.919189453125,
-            2755.922119140625
+            0,
+            0,
+            0,
+            0
           ],
           "model": "standard",
           "settings": {
             "camera": "chase",
-            "fov": 65,
-            "distance": 11,
+            "fov": 58,
+            "distance": 7.5,
             "quality": "simple",
             "maxSpeed": 330,
             "grip": 1,
@@ -241,19 +241,19 @@
           "photo": false,
           "samples": 0,
           "camera": [
-            573.7999878044786,
-            3.493112862848145,
-            -77.35311678780705
+            573.7999877910878,
+            2.856817224024626,
+            -80.76114654541016
           ],
           "orbit": false,
-          "ground": 0.1875,
+          "ground": 0.18750000000000003,
           "render": {
             "calls": 13,
-            "triangles": 183197
+            "triangles": 203185
           },
           "memory": {
-            "geometries": 13,
-            "textures": 10
+            "geometries": 14,
+            "textures": 17
           }
         }
       }
@@ -261,7 +261,7 @@
     {
       "name": "Settings pause simulation and persist across reload",
       "passed": true,
-      "seconds": 13.376,
+      "seconds": 20.227,
       "data": {
         "version": "1.0",
         "ready": true,
@@ -312,8 +312,8 @@
         "model": "standard",
         "settings": {
           "camera": "chase",
-          "fov": 65,
-          "distance": 11,
+          "fov": 58,
+          "distance": 7.5,
           "quality": "simple",
           "maxSpeed": 330,
           "grip": 1,
@@ -328,63 +328,63 @@
         "photo": false,
         "samples": 0,
         "camera": [
-          573.7999877434014,
-          3.480458761682753,
-          -76.49775302957593
+          573.7999877929688,
+          3.0871166229248046,
+          -80
         ],
         "orbit": false,
         "ground": 0.1875,
         "render": {
           "calls": 13,
-          "triangles": 183197
+          "triangles": 203185
         },
         "memory": {
-          "geometries": 13,
-          "textures": 10
+          "geometries": 14,
+          "textures": 17
         }
       }
     },
     {
       "name": "All six camera presets render",
       "passed": true,
-      "seconds": 3.059,
+      "seconds": 18.544,
       "data": {
         "chase": [
-          573.7999877434014,
-          3.480458761682753,
-          -76.49775302957593
+          573.7999877580821,
+          2.682979083534494,
+          -79.99832831879189
         ],
         "close": [
-          573.7999877434014,
-          3.480458761682753,
-          -76.49775302957593
+          573.7999877635826,
+          2.384058627005197,
+          -81.49854400798091
         ],
         "tv": [
-          573.7999877730476,
-          2.461020254385596,
-          -87.42796270288022
+          573.799987773034,
+          1.8683076717348812,
+          -87.39891708150485
         ],
         "cockpit": [
-          573.790007371798,
-          2.462964175873937,
-          -87.9316996298042
+          573.7899877794582,
+          1.5086678420114112,
+          -87.89917621781403
         ],
         "nose": [
-          573.790007371798,
-          2.462964175873937,
-          -87.9316996298042
+          573.7999877903125,
+          0.9304395719734408,
+          -90.35959332075107
         ],
         "top": [
-          573.7800498396006,
-          33.70907220959204,
-          -85.86053936781275
+          573.7899871835721,
+          33.788155363496934,
+          -87.17592980654057
         ]
       }
     },
     {
       "name": "Stationary orbit persists and driving restores the camera",
       "passed": true,
-      "seconds": 15.457,
+      "seconds": 39.364,
       "data": {
         "orbit": {
           "version": "1.0",
@@ -436,8 +436,8 @@
           "model": "standard",
           "settings": {
             "camera": "chase",
-            "fov": 65,
-            "distance": 11,
+            "fov": 58,
+            "distance": 7.5,
             "quality": "simple",
             "maxSpeed": 330,
             "grip": 1,
@@ -452,19 +452,19 @@
           "photo": false,
           "samples": 0,
           "camera": [
-            565.7044910757297,
-            5.151923502391086,
-            -80.78846392488009
+            567.9113221129352,
+            3.9394419069424718,
+            -83.46813491591064
           ],
           "orbit": true,
           "ground": 0.1875,
           "render": {
-            "calls": 13,
-            "triangles": 183197
+            "calls": 14,
+            "triangles": 203197
           },
           "memory": {
-            "geometries": 13,
-            "textures": 10
+            "geometries": 14,
+            "textures": 17
           }
         },
         "zoom": {
@@ -517,8 +517,8 @@
           "model": "standard",
           "settings": {
             "camera": "chase",
-            "fov": 65,
-            "distance": 11,
+            "fov": 58,
+            "distance": 7.5,
             "quality": "simple",
             "maxSpeed": 330,
             "grip": 1,
@@ -533,19 +533,19 @@
           "photo": false,
           "samples": 0,
           "camera": [
-            565.7007762455469,
-            5.022260707745634,
-            -82.76279563732949
+            568.0198552468253,
+            3.8473683977127107,
+            -84.83843556483707
           ],
           "orbit": true,
           "ground": 0.1875,
           "render": {
-            "calls": 12,
-            "triangles": 183185
+            "calls": 14,
+            "triangles": 203197
           },
           "memory": {
-            "geometries": 13,
-            "textures": 10
+            "geometries": 14,
+            "textures": 17
           }
         },
         "driving": {
@@ -598,8 +598,8 @@
           "model": "standard",
           "settings": {
             "camera": "chase",
-            "fov": 65,
-            "distance": 11,
+            "fov": 58,
+            "distance": 7.5,
             "quality": "simple",
             "maxSpeed": 330,
             "grip": 1,
@@ -614,19 +614,19 @@
           "photo": false,
           "samples": 0,
           "camera": [
-            570.1607774536916,
-            4.271759345073969,
-            -84.67709598940085
+            572.6329991538094,
+            3.0075383169936782,
+            -88.75382259281781
           ],
           "orbit": false,
           "ground": 0.1875,
           "render": {
             "calls": 12,
-            "triangles": 183195
+            "triangles": 203183
           },
           "memory": {
-            "geometries": 13,
-            "textures": 10
+            "geometries": 14,
+            "textures": 17
           }
         }
       }
@@ -634,7 +634,7 @@
     {
       "name": "Simple Medium High and Ultra render without shader errors",
       "passed": true,
-      "seconds": 35.518,
+      "seconds": 93.755,
       "data": {
         "simple": {
           "version": "1.0",
@@ -686,8 +686,8 @@
           "model": "standard",
           "settings": {
             "camera": "chase",
-            "fov": 65,
-            "distance": 11,
+            "fov": 58,
+            "distance": 7.5,
             "quality": "simple",
             "maxSpeed": 330,
             "grip": 1,
@@ -702,19 +702,19 @@
           "photo": false,
           "samples": 0,
           "camera": [
-            573.3901919914082,
-            3.5528172542550367,
-            -76.51578245149608
+            573.7999877580821,
+            2.682979083534494,
+            -79.99832831879189
           ],
           "orbit": false,
           "ground": 0.1875,
           "render": {
             "calls": 13,
-            "triangles": 183197
+            "triangles": 203185
           },
           "memory": {
-            "geometries": 13,
-            "textures": 10
+            "geometries": 14,
+            "textures": 17
           }
         },
         "medium": {
@@ -767,8 +767,8 @@
           "model": "standard",
           "settings": {
             "camera": "chase",
-            "fov": 65,
-            "distance": 11,
+            "fov": 58,
+            "distance": 7.5,
             "quality": "medium",
             "maxSpeed": 330,
             "grip": 1,
@@ -783,19 +783,19 @@
           "photo": false,
           "samples": 0,
           "camera": [
-            573.3057003147961,
-            3.567770345926501,
-            -76.52368387854038
+            573.7999877580821,
+            2.682979083534494,
+            -79.99832831879189
           ],
           "orbit": false,
           "ground": 0.1875,
           "render": {
-            "calls": 13,
-            "triangles": 183197
+            "calls": 14,
+            "triangles": 203197
           },
           "memory": {
-            "geometries": 13,
-            "textures": 11
+            "geometries": 14,
+            "textures": 18
           }
         },
         "high": {
@@ -848,8 +848,8 @@
           "model": "standard",
           "settings": {
             "camera": "chase",
-            "fov": 65,
-            "distance": 11,
+            "fov": 58,
+            "distance": 7.5,
             "quality": "high",
             "maxSpeed": 330,
             "grip": 1,
@@ -864,9 +864,9 @@
           "photo": false,
           "samples": 0,
           "camera": [
-            573.4643428654053,
-            3.5397310696259496,
-            -76.51352531886644
+            573.7999877580821,
+            2.682979083534494,
+            -79.99832831879189
           ],
           "orbit": false,
           "ground": 0.1875,
@@ -875,8 +875,8 @@
             "triangles": 1
           },
           "memory": {
-            "geometries": 14,
-            "textures": 30
+            "geometries": 19,
+            "textures": 47
           }
         },
         "ultra": {
@@ -929,8 +929,8 @@
           "model": "ultra",
           "settings": {
             "camera": "chase",
-            "fov": 65,
-            "distance": 11,
+            "fov": 58,
+            "distance": 7.5,
             "quality": "ultra",
             "maxSpeed": 330,
             "grip": 1,
@@ -945,9 +945,9 @@
           "photo": false,
           "samples": 0,
           "camera": [
-            573.4643428654053,
-            3.5397310696259496,
-            -76.51352531886644
+            573.7999877580821,
+            2.682979083534494,
+            -79.99832831879189
           ],
           "orbit": false,
           "ground": 0.1875,
@@ -956,8 +956,8 @@
             "triangles": 1
           },
           "memory": {
-            "geometries": 13,
-            "textures": 29
+            "geometries": 51,
+            "textures": 57
           }
         }
       }
@@ -965,7 +965,7 @@
     {
       "name": "Ultra rain and night lighting",
       "passed": true,
-      "seconds": 39.032,
+      "seconds": 77.038,
       "data": {
         "night": {
           "version": "1.0",
@@ -1017,8 +1017,8 @@
           "model": "ultra",
           "settings": {
             "camera": "chase",
-            "fov": 65,
-            "distance": 11,
+            "fov": 58,
+            "distance": 7.5,
             "quality": "ultra",
             "maxSpeed": 330,
             "grip": 1,
@@ -1033,9 +1033,9 @@
           "photo": false,
           "samples": 0,
           "camera": [
-            573.6652942705224,
-            3.5042360813639952,
-            -76.50297149175974
+            573.7999877580821,
+            2.682979083534494,
+            -79.99832831879189
           ],
           "orbit": false,
           "ground": 0.1875,
@@ -1044,8 +1044,8 @@
             "triangles": 1
           },
           "memory": {
-            "geometries": 46,
-            "textures": 43
+            "geometries": 53,
+            "textures": 58
           }
         },
         "day": {
@@ -1098,8 +1098,8 @@
           "model": "ultra",
           "settings": {
             "camera": "chase",
-            "fov": 65,
-            "distance": 11,
+            "fov": 58,
+            "distance": 7.5,
             "quality": "ultra",
             "maxSpeed": 330,
             "grip": 1,
@@ -1114,9 +1114,9 @@
           "photo": false,
           "samples": 0,
           "camera": [
-            573.7554877554688,
-            3.4883123685487076,
-            -76.49916564883901
+            573.7999877580821,
+            2.682979083534494,
+            -79.99832831879189
           ],
           "orbit": false,
           "ground": 0.1875,
@@ -1125,8 +1125,8 @@
             "triangles": 1
           },
           "memory": {
-            "geometries": 48,
-            "textures": 44
+            "geometries": 53,
+            "textures": 58
           }
         }
       }
@@ -1134,7 +1134,7 @@
     {
       "name": "Snow, fog and sunset graphics",
       "passed": true,
-      "seconds": 31.31,
+      "seconds": 62.368,
       "data": {
         "snow": {
           "version": "1.0",
@@ -1186,8 +1186,8 @@
           "model": "ultra",
           "settings": {
             "camera": "chase",
-            "fov": 65,
-            "distance": 11,
+            "fov": 58,
+            "distance": 7.5,
             "quality": "high",
             "maxSpeed": 330,
             "grip": 1,
@@ -1202,9 +1202,9 @@
           "photo": false,
           "samples": 0,
           "camera": [
-            573.7820468032605,
-            3.483624909019139,
-            -76.49829051003829
+            573.7999877580821,
+            2.682979083534494,
+            -79.99832831879189
           ],
           "orbit": false,
           "ground": 0.1875,
@@ -1213,8 +1213,8 @@
             "triangles": 1
           },
           "memory": {
-            "geometries": 48,
-            "textures": 43
+            "geometries": 54,
+            "textures": 59
           }
         },
         "fog": {
@@ -1267,8 +1267,8 @@
           "model": "ultra",
           "settings": {
             "camera": "chase",
-            "fov": 65,
-            "distance": 11,
+            "fov": 58,
+            "distance": 7.5,
             "quality": "high",
             "maxSpeed": 330,
             "grip": 1,
@@ -1283,9 +1283,9 @@
           "photo": false,
           "samples": 0,
           "camera": [
-            573.7935064713673,
-            3.481602528621468,
-            -76.49794271256324
+            573.7999877580821,
+            2.682979083534494,
+            -79.99832831879189
           ],
           "orbit": false,
           "ground": 0.1875,
@@ -1294,8 +1294,8 @@
             "triangles": 1
           },
           "memory": {
-            "geometries": 49,
-            "textures": 45
+            "geometries": 54,
+            "textures": 59
           }
         }
       }
@@ -1303,7 +1303,7 @@
     {
       "name": "Genuine path-traced Photo Mode produces samples and exits",
       "passed": true,
-      "seconds": 107.049,
+      "seconds": 87.616,
       "data": {
         "version": "1.0",
         "ready": true,
@@ -1354,8 +1354,8 @@
         "model": "ultra",
         "settings": {
           "camera": "chase",
-          "fov": 65,
-          "distance": 11,
+          "fov": 58,
+          "distance": 7.5,
           "quality": "ultra",
           "maxSpeed": 330,
           "grip": 1,
@@ -1370,9 +1370,9 @@
         "photo": true,
         "samples": 2,
         "camera": [
-          573.7999877434014,
-          3.4804587616827556,
-          -76.49775302957593
+          573.7999877580821,
+          2.682979083534494,
+          -79.99832831879189
         ],
         "orbit": false,
         "ground": 0.1875,
@@ -1381,15 +1381,15 @@
           "triangles": 1
         },
         "memory": {
-          "geometries": 49,
-          "textures": 71
+          "geometries": 56,
+          "textures": 82
         }
       }
     },
     {
       "name": "Repeated settings changes and resets remain stable",
       "passed": true,
-      "seconds": 6.561,
+      "seconds": 26.139,
       "data": {
         "version": "1.0",
         "ready": true,
@@ -1440,8 +1440,8 @@
         "model": "ultra",
         "settings": {
           "camera": "chase",
-          "fov": 65,
-          "distance": 11,
+          "fov": 58,
+          "distance": 7.5,
           "quality": "simple",
           "maxSpeed": 330,
           "grip": 1,
@@ -1456,49 +1456,49 @@
         "photo": false,
         "samples": 0,
         "camera": [
-          573.7999877730463,
-          2.461170237445187,
-          -87.42526236258816
+          573.7999877580821,
+          2.682959252633532,
+          -79.99832831873641
         ],
         "orbit": false,
         "ground": 0.1875,
         "render": {
-          "calls": 15,
-          "triangles": 426426
+          "calls": 37,
+          "triangles": 720637
         },
         "memory": {
-          "geometries": 49,
-          "textures": 46
+          "geometries": 56,
+          "textures": 57
         }
       }
     },
     {
       "name": "Mobile landscape multitouch pedals and steering",
       "passed": true,
-      "seconds": 19.299,
+      "seconds": 41.517,
       "data": {
         "version": "1.0",
         "ready": true,
         "failed": false,
         "position": [
-          573.7970581054688,
-          0.7680295705795288,
-          -87.56199645996094
+          573.7911987304688,
+          0.7884852886199951,
+          -87.61556243896484
         ],
         "rotation": [
-          0.000042052892240462825,
-          0.9999969601631165,
-          0.002073100535199046,
-          -0.001281375647522509
+          0.0001019387345877476,
+          0.9999927878379822,
+          0.002101415768265724,
+          -0.0031663014087826014
         ],
         "velocity": [
-          -0.08344408869743347,
-          0.5526037812232971,
-          -0.9962407350540161
+          -0.17359817028045654,
+          -0.03723752498626709,
+          -1.4448623657226562
         ],
-        "speed": 3.5954413746651457,
-        "steer": 0.28500000000000014,
-        "up": 0.9999914009714505,
+        "speed": 5.204748360890238,
+        "steer": 0.3600000000000002,
+        "up": 0.9999911473205265,
         "contacts": [
           true,
           true,
@@ -1506,28 +1506,28 @@
           true
         ],
         "suspension": [
-          0.2081795334815979,
-          0.20807325839996338,
-          0.19320321083068848,
-          0.19309687614440918
+          0.23336797952651978,
+          0.2330964207649231,
+          0.21888887882232666,
+          0.21861732006072998
         ],
         "wheelAngles": [
-          0.15910252928733826,
-          0.17004777491092682,
-          0.15917426347732544,
-          0.170119509100914
+          0.294049471616745,
+          0.3210955858230591,
+          0.29412320256233215,
+          0.32116931676864624
         ],
         "wheelLoads": [
-          511.18939208984375,
-          529.0450439453125,
-          1483.1256103515625,
-          1500.986572265625
+          1292.4862060546875,
+          1326.7672119140625,
+          2577.972900390625,
+          2612.25439453125
         ],
         "model": "standard",
         "settings": {
           "camera": "chase",
-          "fov": 65,
-          "distance": 11,
+          "fov": 58,
+          "distance": 7.5,
           "quality": "simple",
           "maxSpeed": 330,
           "grip": 1,
@@ -1542,26 +1542,26 @@
         "photo": false,
         "samples": 0,
         "camera": [
-          573.8114730314536,
-          3.481651784020824,
-          -76.52320108742478
+          573.8222832007193,
+          2.674140451178848,
+          -80.06248395350593
         ],
         "orbit": false,
         "ground": 0.1875,
         "render": {
-          "calls": 12,
-          "triangles": 183185
+          "calls": 14,
+          "triangles": 203197
         },
         "memory": {
-          "geometries": 13,
-          "textures": 10
+          "geometries": 14,
+          "textures": 17
         }
       }
     },
     {
       "name": "Mobile portrait settings fit viewport",
       "passed": true,
-      "seconds": 26.583,
+      "seconds": 43.189,
       "data": {
         "width": 390,
         "scroll": 390
@@ -1575,8 +1575,16 @@
       "text": "using deprecated parameters for the initialization function; pass a single object instead"
     },
     {
+      "test": "Self-hosted boot and RB19 loading",
+      "text": "RGBELoader has been deprecated. Please use HDRLoader instead."
+    },
+    {
       "test": "Settings pause simulation and persist across reload",
       "text": "using deprecated parameters for the initialization function; pass a single object instead"
+    },
+    {
+      "test": "Settings pause simulation and persist across reload",
+      "text": "RGBELoader has been deprecated. Please use HDRLoader instead."
     },
     {
       "test": "Genuine path-traced Photo Mode produces samples and exits",
@@ -1585,6 +1593,10 @@
     {
       "test": "Mobile landscape multitouch pedals and steering",
       "text": "using deprecated parameters for the initialization function; pass a single object instead"
+    },
+    {
+      "test": "Mobile landscape multitouch pedals and steering",
+      "text": "RGBELoader has been deprecated. Please use HDRLoader instead."
     }
   ],
   "requests": []

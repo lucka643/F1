@@ -75,7 +75,7 @@ export function createCarVisual(scene, notice) {
         parts.forEach((list,part)=>{if(!list.length)return;const g=subset(geometry,list);if(part){const c=WHEEL_CENTERS[part-1];g.translate(-c.x,-c.y,-c.z);}if(!g.attributes.normal)g.computeVertexNormals();const mesh=new THREE.Mesh(g,material);mesh.castShadow=true;mesh.receiveShadow=true;(part?nextWheels[part-1].spin:next).add(mesh);});geometry.dispose();
       });
       const old=assembly;assembly=next;wheels=nextWheels;root.add(assembly);root.remove(old);
-      const disposedGeometry=new Set(),disposedMaterial=new Set();old.traverse(o=>{if(o.geometry&&!disposedGeometry.has(o.geometry)){disposedGeometry.add(o.geometry);o.geometry.dispose();}if(o.material&&!disposedMaterial.has(o.material)){disposedMaterial.add(o.material);o.material.dispose();}});
+      const disposedGeometry=new Set(),disposedMaterial=new Set(),disposedTextures=new Set();old.traverse(o=>{if(o.geometry&&!disposedGeometry.has(o.geometry)){disposedGeometry.add(o.geometry);o.geometry.dispose();}if(o.material&&!disposedMaterial.has(o.material)){disposedMaterial.add(o.material);for(const value of Object.values(o.material)){if(value?.isTexture&&!disposedTextures.has(value)){disposedTextures.add(value);value.dispose();}}o.material.dispose();}});
       gltf.scene.traverse(o=>{if(o.geometry)o.geometry.dispose();});
       loadedQuality=quality;modelStatus=quality;notice(quality==='ultra'?'Full-resolution RB19 loaded':'RB19 loaded · drive with the pedals or W A S D',6000);
     }catch(error){console.warn(error);notice('RB19 loading was interrupted. The temporary car is available.',12000);}finally{draco.dispose();finish();loading=null;}
