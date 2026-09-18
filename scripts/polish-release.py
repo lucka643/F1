@@ -43,5 +43,22 @@ if 'const treeCells=' not in s:
     s=s.replace('const mesh=new THREE.InstancedMesh(geometry,o.material,placements.length);', 'for(const cluster of treeCells.values()){const mesh=new THREE.InstancedMesh(geometry,o.material,cluster.length);')
     s=s.replace('placements.forEach((v,i)=>{dummy.position.copy(v.position);', 'cluster.forEach((v,i)=>{dummy.position.copy(v.position);')
     s=s.replace('mesh.computeBoundingSphere();naturalTrees.add(mesh);', 'mesh.computeBoundingSphere();naturalTrees.add(mesh);}')
+if '// TURF_ALBEDO' not in s:
+    s=s.replace('  hdr.mapping=THREE.EquirectangularReflectionMapping;', '''  // TURF_ALBEDO: recolor the moss scan and reduce repeating large color patches.
+  const turf=document.createElement('canvas');turf.width=grass.map.image.width;turf.height=grass.map.image.height;const tc=turf.getContext('2d');tc.drawImage(grass.map.image,0,0);const pixels=tc.getImageData(0,0,turf.width,turf.height);
+  for(let i=0;i<pixels.data.length;i+=4){pixels.data[i]=25+pixels.data[i]*.4;pixels.data[i+1]=45+pixels.data[i+1]*.55;pixels.data[i+2]=22+pixels.data[i+2]*.65;}
+  tc.putImageData(pixels,0,0);grass.map.image=turf;grass.map.needsUpdate=true;
+  hdr.mapping=THREE.EquirectangularReflectionMapping;''')
+    s=s.replace('track.grassMaterial.normalScale.set(.5,.5);','track.grassMaterial.normalScale.set(.18,.18);')
+    s=s.replace('    const useHDR=detailed&&day&&clear,condition=', '''    // Keep road reflectance in asphalt range instead of overexposed concrete white.
+    track.roadMaterial.color.setHex(settings.weather==='snow'?0xe1e4e7:settings.weather==='rain'?0x687583:0x9ca3aa);
+    track.grassMaterial.color.setHex(settings.weather==='snow'?0xf2f4f5:0xc4ceba);track.banks.material.color.setHex(settings.weather==='snow'?0xe3e8ea:0xb6c0ac);
+    const useHDR=detailed&&day&&clear,condition=''')
 p.write_text(s)
-print('Photographic lighting, spatial vegetation culling and collision refinements applied')
+# Wall-clock sleeps alone are not a rendered-frame barrier on a software GPU.
+p=root/'scripts/browser-test.mjs';s=p.read_text()
+if '// WAIT_FOR_RENDERED_FRAMES' not in s:
+    s=s.replace('await page.waitForTimeout(ms);const h=await health(page);', 'await page.waitForTimeout(ms);\n  // WAIT_FOR_RENDERED_FRAMES: preserve assertions while waiting for the actual view update.\n  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));const h=await health(page);')
+    s=s.replace('assert(Math.hypot(...cameras.top.map((v,i)=>v-cameras.chase[i]))>5);', "assert(Math.hypot(...cameras.top.map((v,i)=>v-cameras.chase[i]))>5,JSON.stringify(cameras));")
+    p.write_text(s)
+print('Visual refinements and rendered-frame camera assertions prepared')
