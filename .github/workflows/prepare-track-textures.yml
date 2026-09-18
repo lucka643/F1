@@ -1,0 +1,29 @@
+name: Prepare supplied track textures
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/prepare-track-textures.yml']
+permissions:
+  contents: read
+jobs:
+  textures:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download public source textures
+        shell: python
+        run: |
+          import urllib.request,json,pathlib,hashlib,concurrent.futures
+          root=pathlib.Path('track-textures'); root.mkdir(exist_ok=True)
+          data=json.load(urllib.request.urlopen('https://sketchfab.com/i/models/e8b1859b628a42209b8866d9a4b45936/textures'))
+          def save(t):
+              image=max(t['images'],key=lambda i:i['width']*i['height'])
+              content=urllib.request.urlopen(image['url'],timeout=30).read()
+              name=t['uid']+'.png'; (root/name).write_bytes(content)
+              return {'name':t['name'],'file':name,'sha256':hashlib.sha256(content).hexdigest(),'url':image['url']}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool: result=list(pool.map(save,data['results']))
+          (root/'manifest.json').write_text(json.dumps(result,indent=2))
+      - uses: actions/upload-artifact@v4
+        with:
+          name: track-textures
+          path: track-textures/
+          retention-days: 3
