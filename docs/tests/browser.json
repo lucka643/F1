@@ -1,0 +1,1591 @@
+{
+  "testedAt": "2026-09-18T05:55:00.174Z",
+  "browser": "Playwright Chromium 1.55.1; Linux; ANGLE SwiftShader software GPU",
+  "note": "This checks correctness, not real-device frame rate. iPhone Safari has not been physically tested.",
+  "tests": [
+    {
+      "name": "Self-hosted boot and RB19 loading",
+      "passed": true,
+      "seconds": 21.288,
+      "data": {
+        "version": "1.0",
+        "ready": true,
+        "failed": false,
+        "position": [
+          573.7999877929688,
+          0.7883476614952087,
+          -87.4999008178711
+        ],
+        "rotation": [
+          -1.0586774124021758e-8,
+          0.9999999403953552,
+          0.00035974712227471173,
+          -3.2130804961116866e-11
+        ],
+        "velocity": [
+          -4.0463838502091676e-8,
+          -0.036062564700841904,
+          0.00008557357068639249
+        ],
+        "speed": -0.00040147328334044785,
+        "steer": 0,
+        "up": 0.9999997411640158,
+        "contacts": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "suspension": [
+          0.22712379693984985,
+          0.22712379693984985,
+          0.22457677125930786,
+          0.22457677125930786
+        ],
+        "wheelAngles": [
+          -0.0009484812617301941,
+          -0.0009484807960689068,
+          -0.0009531614487059414,
+          -0.0009531613322906196
+        ],
+        "wheelLoads": [
+          1867.5322265625,
+          1867.5318603515625,
+          2063.90869140625,
+          2063.908203125
+        ],
+        "model": "standard",
+        "settings": {
+          "camera": "chase",
+          "fov": 65,
+          "distance": 11,
+          "quality": "simple",
+          "maxSpeed": 330,
+          "grip": 1,
+          "downforce": 1,
+          "steering": 1,
+          "assist": true,
+          "weather": "clear",
+          "time": "day",
+          "sound": false,
+          "showFPS": false
+        },
+        "photo": false,
+        "samples": 0,
+        "camera": [
+          573.7999877422825,
+          3.4805880793830526,
+          -76.497942056629
+        ],
+        "orbit": false,
+        "ground": 0.1875,
+        "render": {
+          "calls": 12,
+          "triangles": 183185
+        },
+        "memory": {
+          "geometries": 13,
+          "textures": 10
+        }
+      }
+    },
+    {
+      "name": "Keyboard acceleration, wheel spin and reset",
+      "passed": true,
+      "seconds": 5.865,
+      "data": {
+        "driving": {
+          "version": "1.0",
+          "ready": true,
+          "failed": false,
+          "position": [
+            573.7999877929688,
+            0.7882043123245239,
+            -88.6875991821289
+          ],
+          "rotation": [
+            2.2673216637514315e-9,
+            0.9999958872795105,
+            0.002858090680092573,
+            2.1275337394599525e-11
+          ],
+          "velocity": [
+            5.369165734236958e-8,
+            -0.03726557269692421,
+            -5.676202774047852
+          ],
+          "speed": 20.433226967287624,
+          "steer": 0,
+          "up": 0.9999836626353288,
+          "contacts": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "suspension": [
+            0.23581862449645996,
+            0.23581862449645996,
+            0.2156272530555725,
+            0.2156272530555725
+          ],
+          "wheelAngles": [
+            3.1664979457855225,
+            3.1664979457855225,
+            3.166642665863037,
+            3.166642665863037
+          ],
+          "wheelLoads": [
+            1201.2764892578125,
+            1201.279296875,
+            2755.919189453125,
+            2755.922119140625
+          ],
+          "model": "standard",
+          "settings": {
+            "camera": "chase",
+            "fov": 65,
+            "distance": 11,
+            "quality": "simple",
+            "maxSpeed": 330,
+            "grip": 1,
+            "downforce": 1,
+            "steering": 1,
+            "assist": true,
+            "weather": "clear",
+            "time": "day",
+            "sound": false,
+            "showFPS": false
+          },
+          "photo": false,
+          "samples": 0,
+          "camera": [
+            573.7999878044786,
+            3.493112862848145,
+            -77.35311678780705
+          ],
+          "orbit": false,
+          "ground": 0.1875,
+          "render": {
+            "calls": 13,
+            "triangles": 183197
+          },
+          "memory": {
+            "geometries": 13,
+            "textures": 10
+          }
+        },
+        "reset": {
+          "version": "1.0",
+          "ready": true,
+          "failed": false,
+          "position": [
+            573.7999877929688,
+            1.087499976158142,
+            -87.54756927490234
+          ],
+          "rotation": [
+            0,
+            1,
+            0,
+            4.430073061861828e-12
+          ],
+          "velocity": [
+            0,
+            0,
+            0
+          ],
+          "speed": 0,
+          "steer": 0,
+          "up": 1,
+          "contacts": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "suspension": [
+            0.25,
+            0.25,
+            0.25,
+            0.25
+          ],
+          "wheelAngles": [
+            3.1664979457855225,
+            3.1664979457855225,
+            3.166642665863037,
+            3.166642665863037
+          ],
+          "wheelLoads": [
+            1201.2764892578125,
+            1201.279296875,
+            2755.919189453125,
+            2755.922119140625
+          ],
+          "model": "standard",
+          "settings": {
+            "camera": "chase",
+            "fov": 65,
+            "distance": 11,
+            "quality": "simple",
+            "maxSpeed": 330,
+            "grip": 1,
+            "downforce": 1,
+            "steering": 1,
+            "assist": true,
+            "weather": "clear",
+            "time": "day",
+            "sound": false,
+            "showFPS": false
+          },
+          "photo": false,
+          "samples": 0,
+          "camera": [
+            573.7999878044786,
+            3.493112862848145,
+            -77.35311678780705
+          ],
+          "orbit": false,
+          "ground": 0.1875,
+          "render": {
+            "calls": 13,
+            "triangles": 183197
+          },
+          "memory": {
+            "geometries": 13,
+            "textures": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "Settings pause simulation and persist across reload",
+      "passed": true,
+      "seconds": 13.376,
+      "data": {
+        "version": "1.0",
+        "ready": true,
+        "failed": false,
+        "position": [
+          573.7999877929688,
+          0.788379967212677,
+          -87.49969482421875
+        ],
+        "rotation": [
+          -9.230235242796425e-9,
+          0.9999999403953552,
+          0.00036007713060826063,
+          -9.224044271449738e-12
+        ],
+        "velocity": [
+          1.5860636892739421e-7,
+          -0.035761862993240356,
+          0.00005931820851401426
+        ],
+        "speed": -0.00030626010309606357,
+        "steer": 0,
+        "up": 0.9999997406889198,
+        "contacts": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "suspension": [
+          0.22715473175048828,
+          0.22715473175048828,
+          0.22460532188415527,
+          0.22460538148880005
+        ],
+        "wheelAngles": [
+          -0.0012689289869740605,
+          -0.0012689302675426006,
+          -0.0012705636909231544,
+          -0.0012705654371529818
+        ],
+        "wheelLoads": [
+          1863.983642578125,
+          1863.9859619140625,
+          2059.640869140625,
+          2059.638671875
+        ],
+        "model": "standard",
+        "settings": {
+          "camera": "chase",
+          "fov": 65,
+          "distance": 11,
+          "quality": "simple",
+          "maxSpeed": 330,
+          "grip": 1,
+          "downforce": 1,
+          "steering": 1,
+          "assist": true,
+          "weather": "clear",
+          "time": "day",
+          "sound": false,
+          "showFPS": false
+        },
+        "photo": false,
+        "samples": 0,
+        "camera": [
+          573.7999877434014,
+          3.480458761682753,
+          -76.49775302957593
+        ],
+        "orbit": false,
+        "ground": 0.1875,
+        "render": {
+          "calls": 13,
+          "triangles": 183197
+        },
+        "memory": {
+          "geometries": 13,
+          "textures": 10
+        }
+      }
+    },
+    {
+      "name": "All six camera presets render",
+      "passed": true,
+      "seconds": 3.059,
+      "data": {
+        "chase": [
+          573.7999877434014,
+          3.480458761682753,
+          -76.49775302957593
+        ],
+        "close": [
+          573.7999877434014,
+          3.480458761682753,
+          -76.49775302957593
+        ],
+        "tv": [
+          573.7999877730476,
+          2.461020254385596,
+          -87.42796270288022
+        ],
+        "cockpit": [
+          573.790007371798,
+          2.462964175873937,
+          -87.9316996298042
+        ],
+        "nose": [
+          573.790007371798,
+          2.462964175873937,
+          -87.9316996298042
+        ],
+        "top": [
+          573.7800498396006,
+          33.70907220959204,
+          -85.86053936781275
+        ]
+      }
+    },
+    {
+      "name": "Stationary orbit persists and driving restores the camera",
+      "passed": true,
+      "seconds": 15.457,
+      "data": {
+        "orbit": {
+          "version": "1.0",
+          "ready": true,
+          "failed": false,
+          "position": [
+            573.7999877929688,
+            0.788379967212677,
+            -87.49969482421875
+          ],
+          "rotation": [
+            -9.230235242796425e-9,
+            0.9999999403953552,
+            0.00036007713060826063,
+            -9.224044271449738e-12
+          ],
+          "velocity": [
+            1.5860636892739421e-7,
+            -0.035761862993240356,
+            0.00005931820851401426
+          ],
+          "speed": -0.00030626010309606357,
+          "steer": 0,
+          "up": 0.9999997406889198,
+          "contacts": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "suspension": [
+            0.22715473175048828,
+            0.22715473175048828,
+            0.22460532188415527,
+            0.22460538148880005
+          ],
+          "wheelAngles": [
+            -0.0012689289869740605,
+            -0.0012689302675426006,
+            -0.0012705636909231544,
+            -0.0012705654371529818
+          ],
+          "wheelLoads": [
+            1863.983642578125,
+            1863.9859619140625,
+            2059.640869140625,
+            2059.638671875
+          ],
+          "model": "standard",
+          "settings": {
+            "camera": "chase",
+            "fov": 65,
+            "distance": 11,
+            "quality": "simple",
+            "maxSpeed": 330,
+            "grip": 1,
+            "downforce": 1,
+            "steering": 1,
+            "assist": true,
+            "weather": "clear",
+            "time": "day",
+            "sound": false,
+            "showFPS": false
+          },
+          "photo": false,
+          "samples": 0,
+          "camera": [
+            565.7044910757297,
+            5.151923502391086,
+            -80.78846392488009
+          ],
+          "orbit": true,
+          "ground": 0.1875,
+          "render": {
+            "calls": 13,
+            "triangles": 183197
+          },
+          "memory": {
+            "geometries": 13,
+            "textures": 10
+          }
+        },
+        "zoom": {
+          "version": "1.0",
+          "ready": true,
+          "failed": false,
+          "position": [
+            573.7999877929688,
+            0.788379967212677,
+            -87.49969482421875
+          ],
+          "rotation": [
+            -9.230235242796425e-9,
+            0.9999999403953552,
+            0.00036007713060826063,
+            -9.224044271449738e-12
+          ],
+          "velocity": [
+            1.5860636892739421e-7,
+            -0.035761862993240356,
+            0.00005931820851401426
+          ],
+          "speed": -0.00030626010309606357,
+          "steer": 0,
+          "up": 0.9999997406889198,
+          "contacts": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "suspension": [
+            0.22715473175048828,
+            0.22715473175048828,
+            0.22460532188415527,
+            0.22460538148880005
+          ],
+          "wheelAngles": [
+            -0.0012689289869740605,
+            -0.0012689302675426006,
+            -0.0012705636909231544,
+            -0.0012705654371529818
+          ],
+          "wheelLoads": [
+            1863.983642578125,
+            1863.9859619140625,
+            2059.640869140625,
+            2059.638671875
+          ],
+          "model": "standard",
+          "settings": {
+            "camera": "chase",
+            "fov": 65,
+            "distance": 11,
+            "quality": "simple",
+            "maxSpeed": 330,
+            "grip": 1,
+            "downforce": 1,
+            "steering": 1,
+            "assist": true,
+            "weather": "clear",
+            "time": "day",
+            "sound": false,
+            "showFPS": false
+          },
+          "photo": false,
+          "samples": 0,
+          "camera": [
+            565.7007762455469,
+            5.022260707745634,
+            -82.76279563732949
+          ],
+          "orbit": true,
+          "ground": 0.1875,
+          "render": {
+            "calls": 12,
+            "triangles": 183185
+          },
+          "memory": {
+            "geometries": 13,
+            "textures": 10
+          }
+        },
+        "driving": {
+          "version": "1.0",
+          "ready": true,
+          "failed": false,
+          "position": [
+            573.7999877929688,
+            0.7865058183670044,
+            -97.2563705444336
+          ],
+          "rotation": [
+            -1.144145111986461e-9,
+            0.9999955892562866,
+            0.0029718324076384306,
+            6.981652062032495e-11
+          ],
+          "velocity": [
+            -1.910114377778882e-8,
+            -0.042185328900814056,
+            -17.0221004486084
+          ],
+          "speed": 61.277577819952924,
+          "steer": 0,
+          "up": 0.9999823364242818,
+          "contacts": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "suspension": [
+            0.23456543684005737,
+            0.2345653772354126,
+            0.21352458000183105,
+            0.21352458000183105
+          ],
+          "wheelAngles": [
+            26.019128799438477,
+            26.019128799438477,
+            26.0192928314209,
+            26.0192928314209
+          ],
+          "wheelLoads": [
+            1323.5701904296875,
+            1323.574951171875,
+            2924.7939453125,
+            2924.79443359375
+          ],
+          "model": "standard",
+          "settings": {
+            "camera": "chase",
+            "fov": 65,
+            "distance": 11,
+            "quality": "simple",
+            "maxSpeed": 330,
+            "grip": 1,
+            "downforce": 1,
+            "steering": 1,
+            "assist": true,
+            "weather": "clear",
+            "time": "day",
+            "sound": false,
+            "showFPS": false
+          },
+          "photo": false,
+          "samples": 0,
+          "camera": [
+            570.1607774536916,
+            4.271759345073969,
+            -84.67709598940085
+          ],
+          "orbit": false,
+          "ground": 0.1875,
+          "render": {
+            "calls": 12,
+            "triangles": 183195
+          },
+          "memory": {
+            "geometries": 13,
+            "textures": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "Simple Medium High and Ultra render without shader errors",
+      "passed": true,
+      "seconds": 35.518,
+      "data": {
+        "simple": {
+          "version": "1.0",
+          "ready": true,
+          "failed": false,
+          "position": [
+            573.7999877929688,
+            0.788379967212677,
+            -87.49969482421875
+          ],
+          "rotation": [
+            -9.230235242796425e-9,
+            0.9999999403953552,
+            0.00036007713060826063,
+            -9.224044271449738e-12
+          ],
+          "velocity": [
+            1.5860636892739421e-7,
+            -0.035761862993240356,
+            0.00005931820851401426
+          ],
+          "speed": -0.00030626010309606357,
+          "steer": 0,
+          "up": 0.9999997406889198,
+          "contacts": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "suspension": [
+            0.22715473175048828,
+            0.22715473175048828,
+            0.22460532188415527,
+            0.22460538148880005
+          ],
+          "wheelAngles": [
+            35.4886474609375,
+            35.4886474609375,
+            35.48880386352539,
+            35.48880386352539
+          ],
+          "wheelLoads": [
+            1863.983642578125,
+            1863.9859619140625,
+            2059.640869140625,
+            2059.638671875
+          ],
+          "model": "standard",
+          "settings": {
+            "camera": "chase",
+            "fov": 65,
+            "distance": 11,
+            "quality": "simple",
+            "maxSpeed": 330,
+            "grip": 1,
+            "downforce": 1,
+            "steering": 1,
+            "assist": true,
+            "weather": "clear",
+            "time": "day",
+            "sound": false,
+            "showFPS": false
+          },
+          "photo": false,
+          "samples": 0,
+          "camera": [
+            573.3901919914082,
+            3.5528172542550367,
+            -76.51578245149608
+          ],
+          "orbit": false,
+          "ground": 0.1875,
+          "render": {
+            "calls": 13,
+            "triangles": 183197
+          },
+          "memory": {
+            "geometries": 13,
+            "textures": 10
+          }
+        },
+        "medium": {
+          "version": "1.0",
+          "ready": true,
+          "failed": false,
+          "position": [
+            573.7999877929688,
+            0.788379967212677,
+            -87.49969482421875
+          ],
+          "rotation": [
+            -9.230235242796425e-9,
+            0.9999999403953552,
+            0.00036007713060826063,
+            -9.224044271449738e-12
+          ],
+          "velocity": [
+            1.5860636892739421e-7,
+            -0.035761862993240356,
+            0.00005931820851401426
+          ],
+          "speed": -0.00030626010309606357,
+          "steer": 0,
+          "up": 0.9999997406889198,
+          "contacts": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "suspension": [
+            0.22715473175048828,
+            0.22715473175048828,
+            0.22460532188415527,
+            0.22460538148880005
+          ],
+          "wheelAngles": [
+            35.4886474609375,
+            35.4886474609375,
+            35.48880386352539,
+            35.48880386352539
+          ],
+          "wheelLoads": [
+            1863.983642578125,
+            1863.9859619140625,
+            2059.640869140625,
+            2059.638671875
+          ],
+          "model": "standard",
+          "settings": {
+            "camera": "chase",
+            "fov": 65,
+            "distance": 11,
+            "quality": "medium",
+            "maxSpeed": 330,
+            "grip": 1,
+            "downforce": 1,
+            "steering": 1,
+            "assist": true,
+            "weather": "clear",
+            "time": "day",
+            "sound": false,
+            "showFPS": false
+          },
+          "photo": false,
+          "samples": 0,
+          "camera": [
+            573.3057003147961,
+            3.567770345926501,
+            -76.52368387854038
+          ],
+          "orbit": false,
+          "ground": 0.1875,
+          "render": {
+            "calls": 13,
+            "triangles": 183197
+          },
+          "memory": {
+            "geometries": 13,
+            "textures": 11
+          }
+        },
+        "high": {
+          "version": "1.0",
+          "ready": true,
+          "failed": false,
+          "position": [
+            573.7999877929688,
+            0.788379967212677,
+            -87.49969482421875
+          ],
+          "rotation": [
+            -9.230235242796425e-9,
+            0.9999999403953552,
+            0.00036007713060826063,
+            -9.224044271449738e-12
+          ],
+          "velocity": [
+            1.5860636892739421e-7,
+            -0.035761862993240356,
+            0.00005931820851401426
+          ],
+          "speed": -0.00030626010309606357,
+          "steer": 0,
+          "up": 0.9999997406889198,
+          "contacts": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "suspension": [
+            0.22715473175048828,
+            0.22715473175048828,
+            0.22460532188415527,
+            0.22460538148880005
+          ],
+          "wheelAngles": [
+            35.4886474609375,
+            35.4886474609375,
+            35.48880386352539,
+            35.48880386352539
+          ],
+          "wheelLoads": [
+            1863.983642578125,
+            1863.9859619140625,
+            2059.640869140625,
+            2059.638671875
+          ],
+          "model": "standard",
+          "settings": {
+            "camera": "chase",
+            "fov": 65,
+            "distance": 11,
+            "quality": "high",
+            "maxSpeed": 330,
+            "grip": 1,
+            "downforce": 1,
+            "steering": 1,
+            "assist": true,
+            "weather": "clear",
+            "time": "day",
+            "sound": false,
+            "showFPS": false
+          },
+          "photo": false,
+          "samples": 0,
+          "camera": [
+            573.4643428654053,
+            3.5397310696259496,
+            -76.51352531886644
+          ],
+          "orbit": false,
+          "ground": 0.1875,
+          "render": {
+            "calls": 1,
+            "triangles": 1
+          },
+          "memory": {
+            "geometries": 14,
+            "textures": 30
+          }
+        },
+        "ultra": {
+          "version": "1.0",
+          "ready": true,
+          "failed": false,
+          "position": [
+            573.7999877929688,
+            0.788379967212677,
+            -87.49969482421875
+          ],
+          "rotation": [
+            -9.230235242796425e-9,
+            0.9999999403953552,
+            0.00036007713060826063,
+            -9.224044271449738e-12
+          ],
+          "velocity": [
+            1.5860636892739421e-7,
+            -0.035761862993240356,
+            0.00005931820851401426
+          ],
+          "speed": -0.00030626010309606357,
+          "steer": 0,
+          "up": 0.9999997406889198,
+          "contacts": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "suspension": [
+            0.22715473175048828,
+            0.22715473175048828,
+            0.22460532188415527,
+            0.22460538148880005
+          ],
+          "wheelAngles": [
+            35.4886474609375,
+            35.4886474609375,
+            35.48880386352539,
+            35.48880386352539
+          ],
+          "wheelLoads": [
+            1863.983642578125,
+            1863.9859619140625,
+            2059.640869140625,
+            2059.638671875
+          ],
+          "model": "ultra",
+          "settings": {
+            "camera": "chase",
+            "fov": 65,
+            "distance": 11,
+            "quality": "ultra",
+            "maxSpeed": 330,
+            "grip": 1,
+            "downforce": 1,
+            "steering": 1,
+            "assist": true,
+            "weather": "clear",
+            "time": "day",
+            "sound": false,
+            "showFPS": false
+          },
+          "photo": false,
+          "samples": 0,
+          "camera": [
+            573.4643428654053,
+            3.5397310696259496,
+            -76.51352531886644
+          ],
+          "orbit": false,
+          "ground": 0.1875,
+          "render": {
+            "calls": 1,
+            "triangles": 1
+          },
+          "memory": {
+            "geometries": 13,
+            "textures": 29
+          }
+        }
+      }
+    },
+    {
+      "name": "Ultra rain and night lighting",
+      "passed": true,
+      "seconds": 39.032,
+      "data": {
+        "night": {
+          "version": "1.0",
+          "ready": true,
+          "failed": false,
+          "position": [
+            573.7999877929688,
+            0.788379967212677,
+            -87.49969482421875
+          ],
+          "rotation": [
+            -9.230235242796425e-9,
+            0.9999999403953552,
+            0.00036007713060826063,
+            -9.224044271449738e-12
+          ],
+          "velocity": [
+            1.5860636892739421e-7,
+            -0.035761862993240356,
+            0.00005931820851401426
+          ],
+          "speed": -0.00030626010309606357,
+          "steer": 0,
+          "up": 0.9999997406889198,
+          "contacts": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "suspension": [
+            0.22715473175048828,
+            0.22715473175048828,
+            0.22460532188415527,
+            0.22460538148880005
+          ],
+          "wheelAngles": [
+            35.4886474609375,
+            35.4886474609375,
+            35.48880386352539,
+            35.48880386352539
+          ],
+          "wheelLoads": [
+            1863.983642578125,
+            1863.9859619140625,
+            2059.640869140625,
+            2059.638671875
+          ],
+          "model": "ultra",
+          "settings": {
+            "camera": "chase",
+            "fov": 65,
+            "distance": 11,
+            "quality": "ultra",
+            "maxSpeed": 330,
+            "grip": 1,
+            "downforce": 1,
+            "steering": 1,
+            "assist": true,
+            "weather": "rain",
+            "time": "night",
+            "sound": false,
+            "showFPS": false
+          },
+          "photo": false,
+          "samples": 0,
+          "camera": [
+            573.6652942705224,
+            3.5042360813639952,
+            -76.50297149175974
+          ],
+          "orbit": false,
+          "ground": 0.1875,
+          "render": {
+            "calls": 1,
+            "triangles": 1
+          },
+          "memory": {
+            "geometries": 46,
+            "textures": 43
+          }
+        },
+        "day": {
+          "version": "1.0",
+          "ready": true,
+          "failed": false,
+          "position": [
+            573.7999877929688,
+            0.788379967212677,
+            -87.49969482421875
+          ],
+          "rotation": [
+            -9.230235242796425e-9,
+            0.9999999403953552,
+            0.00036007713060826063,
+            -9.224044271449738e-12
+          ],
+          "velocity": [
+            1.5860636892739421e-7,
+            -0.035761862993240356,
+            0.00005931820851401426
+          ],
+          "speed": -0.00030626010309606357,
+          "steer": 0,
+          "up": 0.9999997406889198,
+          "contacts": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "suspension": [
+            0.22715473175048828,
+            0.22715473175048828,
+            0.22460532188415527,
+            0.22460538148880005
+          ],
+          "wheelAngles": [
+            35.4886474609375,
+            35.4886474609375,
+            35.48880386352539,
+            35.48880386352539
+          ],
+          "wheelLoads": [
+            1863.983642578125,
+            1863.9859619140625,
+            2059.640869140625,
+            2059.638671875
+          ],
+          "model": "ultra",
+          "settings": {
+            "camera": "chase",
+            "fov": 65,
+            "distance": 11,
+            "quality": "ultra",
+            "maxSpeed": 330,
+            "grip": 1,
+            "downforce": 1,
+            "steering": 1,
+            "assist": true,
+            "weather": "rain",
+            "time": "day",
+            "sound": false,
+            "showFPS": false
+          },
+          "photo": false,
+          "samples": 0,
+          "camera": [
+            573.7554877554688,
+            3.4883123685487076,
+            -76.49916564883901
+          ],
+          "orbit": false,
+          "ground": 0.1875,
+          "render": {
+            "calls": 1,
+            "triangles": 1
+          },
+          "memory": {
+            "geometries": 48,
+            "textures": 44
+          }
+        }
+      }
+    },
+    {
+      "name": "Snow, fog and sunset graphics",
+      "passed": true,
+      "seconds": 31.31,
+      "data": {
+        "snow": {
+          "version": "1.0",
+          "ready": true,
+          "failed": false,
+          "position": [
+            573.7999877929688,
+            0.788379967212677,
+            -87.49969482421875
+          ],
+          "rotation": [
+            -9.230235242796425e-9,
+            0.9999999403953552,
+            0.00036007713060826063,
+            -9.224044271449738e-12
+          ],
+          "velocity": [
+            1.5860636892739421e-7,
+            -0.035761862993240356,
+            0.00005931820851401426
+          ],
+          "speed": -0.00030626010309606357,
+          "steer": 0,
+          "up": 0.9999997406889198,
+          "contacts": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "suspension": [
+            0.22715473175048828,
+            0.22715473175048828,
+            0.22460532188415527,
+            0.22460538148880005
+          ],
+          "wheelAngles": [
+            35.4886474609375,
+            35.4886474609375,
+            35.48880386352539,
+            35.48880386352539
+          ],
+          "wheelLoads": [
+            1863.983642578125,
+            1863.9859619140625,
+            2059.640869140625,
+            2059.638671875
+          ],
+          "model": "ultra",
+          "settings": {
+            "camera": "chase",
+            "fov": 65,
+            "distance": 11,
+            "quality": "high",
+            "maxSpeed": 330,
+            "grip": 1,
+            "downforce": 1,
+            "steering": 1,
+            "assist": true,
+            "weather": "snow",
+            "time": "sunset",
+            "sound": false,
+            "showFPS": false
+          },
+          "photo": false,
+          "samples": 0,
+          "camera": [
+            573.7820468032605,
+            3.483624909019139,
+            -76.49829051003829
+          ],
+          "orbit": false,
+          "ground": 0.1875,
+          "render": {
+            "calls": 1,
+            "triangles": 1
+          },
+          "memory": {
+            "geometries": 48,
+            "textures": 43
+          }
+        },
+        "fog": {
+          "version": "1.0",
+          "ready": true,
+          "failed": false,
+          "position": [
+            573.7999877929688,
+            0.788379967212677,
+            -87.49969482421875
+          ],
+          "rotation": [
+            -9.230235242796425e-9,
+            0.9999999403953552,
+            0.00036007713060826063,
+            -9.224044271449738e-12
+          ],
+          "velocity": [
+            1.5860636892739421e-7,
+            -0.035761862993240356,
+            0.00005931820851401426
+          ],
+          "speed": -0.00030626010309606357,
+          "steer": 0,
+          "up": 0.9999997406889198,
+          "contacts": [
+            true,
+            true,
+            true,
+            true
+          ],
+          "suspension": [
+            0.22715473175048828,
+            0.22715473175048828,
+            0.22460532188415527,
+            0.22460538148880005
+          ],
+          "wheelAngles": [
+            35.4886474609375,
+            35.4886474609375,
+            35.48880386352539,
+            35.48880386352539
+          ],
+          "wheelLoads": [
+            1863.983642578125,
+            1863.9859619140625,
+            2059.640869140625,
+            2059.638671875
+          ],
+          "model": "ultra",
+          "settings": {
+            "camera": "chase",
+            "fov": 65,
+            "distance": 11,
+            "quality": "high",
+            "maxSpeed": 330,
+            "grip": 1,
+            "downforce": 1,
+            "steering": 1,
+            "assist": true,
+            "weather": "fog",
+            "time": "day",
+            "sound": false,
+            "showFPS": false
+          },
+          "photo": false,
+          "samples": 0,
+          "camera": [
+            573.7935064713673,
+            3.481602528621468,
+            -76.49794271256324
+          ],
+          "orbit": false,
+          "ground": 0.1875,
+          "render": {
+            "calls": 1,
+            "triangles": 1
+          },
+          "memory": {
+            "geometries": 49,
+            "textures": 45
+          }
+        }
+      }
+    },
+    {
+      "name": "Genuine path-traced Photo Mode produces samples and exits",
+      "passed": true,
+      "seconds": 107.049,
+      "data": {
+        "version": "1.0",
+        "ready": true,
+        "failed": false,
+        "position": [
+          573.7999877929688,
+          0.788379967212677,
+          -87.49969482421875
+        ],
+        "rotation": [
+          -9.230235242796425e-9,
+          0.9999999403953552,
+          0.00036007713060826063,
+          -9.224044271449738e-12
+        ],
+        "velocity": [
+          1.5860636892739421e-7,
+          -0.035761862993240356,
+          0.00005931820851401426
+        ],
+        "speed": -0.00030626010309606357,
+        "steer": 0,
+        "up": 0.9999997406889198,
+        "contacts": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "suspension": [
+          0.22715473175048828,
+          0.22715473175048828,
+          0.22460532188415527,
+          0.22460538148880005
+        ],
+        "wheelAngles": [
+          35.48714828491211,
+          35.48714828491211,
+          35.4872932434082,
+          35.4872932434082
+        ],
+        "wheelLoads": [
+          1863.983642578125,
+          1863.9859619140625,
+          2059.640869140625,
+          2059.638671875
+        ],
+        "model": "ultra",
+        "settings": {
+          "camera": "chase",
+          "fov": 65,
+          "distance": 11,
+          "quality": "ultra",
+          "maxSpeed": 330,
+          "grip": 1,
+          "downforce": 1,
+          "steering": 1,
+          "assist": true,
+          "weather": "clear",
+          "time": "day",
+          "sound": false,
+          "showFPS": false
+        },
+        "photo": true,
+        "samples": 2,
+        "camera": [
+          573.7999877434014,
+          3.4804587616827556,
+          -76.49775302957593
+        ],
+        "orbit": false,
+        "ground": 0.1875,
+        "render": {
+          "calls": 1,
+          "triangles": 1
+        },
+        "memory": {
+          "geometries": 49,
+          "textures": 71
+        }
+      }
+    },
+    {
+      "name": "Repeated settings changes and resets remain stable",
+      "passed": true,
+      "seconds": 6.561,
+      "data": {
+        "version": "1.0",
+        "ready": true,
+        "failed": false,
+        "position": [
+          573.7999877929688,
+          0.788360059261322,
+          -87.49969482421875
+        ],
+        "rotation": [
+          -9.230235242796425e-9,
+          0.9999999403953552,
+          0.00036007713060826063,
+          -9.224044271449738e-12
+        ],
+        "velocity": [
+          2.0671355116519408e-7,
+          -0.036349788308143616,
+          0.00006745597056578845
+        ],
+        "speed": -0.0003370802683218036,
+        "steer": 0,
+        "up": 0.9999997406889198,
+        "contacts": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "suspension": [
+          0.22713971138000488,
+          0.22713977098464966,
+          0.22459036111831665,
+          0.22459036111831665
+        ],
+        "wheelAngles": [
+          35.476287841796875,
+          35.476287841796875,
+          35.476318359375,
+          35.476318359375
+        ],
+        "wheelLoads": [
+          1867.6884765625,
+          1867.6865234375,
+          2063.5830078125,
+          2063.585693359375
+        ],
+        "model": "ultra",
+        "settings": {
+          "camera": "chase",
+          "fov": 65,
+          "distance": 11,
+          "quality": "simple",
+          "maxSpeed": 330,
+          "grip": 1,
+          "downforce": 1,
+          "steering": 1,
+          "assist": true,
+          "weather": "rain",
+          "time": "day",
+          "sound": false,
+          "showFPS": false
+        },
+        "photo": false,
+        "samples": 0,
+        "camera": [
+          573.7999877730463,
+          2.461170237445187,
+          -87.42526236258816
+        ],
+        "orbit": false,
+        "ground": 0.1875,
+        "render": {
+          "calls": 15,
+          "triangles": 426426
+        },
+        "memory": {
+          "geometries": 49,
+          "textures": 46
+        }
+      }
+    },
+    {
+      "name": "Mobile landscape multitouch pedals and steering",
+      "passed": true,
+      "seconds": 19.299,
+      "data": {
+        "version": "1.0",
+        "ready": true,
+        "failed": false,
+        "position": [
+          573.7970581054688,
+          0.7680295705795288,
+          -87.56199645996094
+        ],
+        "rotation": [
+          0.000042052892240462825,
+          0.9999969601631165,
+          0.002073100535199046,
+          -0.001281375647522509
+        ],
+        "velocity": [
+          -0.08344408869743347,
+          0.5526037812232971,
+          -0.9962407350540161
+        ],
+        "speed": 3.5954413746651457,
+        "steer": 0.28500000000000014,
+        "up": 0.9999914009714505,
+        "contacts": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "suspension": [
+          0.2081795334815979,
+          0.20807325839996338,
+          0.19320321083068848,
+          0.19309687614440918
+        ],
+        "wheelAngles": [
+          0.15910252928733826,
+          0.17004777491092682,
+          0.15917426347732544,
+          0.170119509100914
+        ],
+        "wheelLoads": [
+          511.18939208984375,
+          529.0450439453125,
+          1483.1256103515625,
+          1500.986572265625
+        ],
+        "model": "standard",
+        "settings": {
+          "camera": "chase",
+          "fov": 65,
+          "distance": 11,
+          "quality": "simple",
+          "maxSpeed": 330,
+          "grip": 1,
+          "downforce": 1,
+          "steering": 1,
+          "assist": true,
+          "weather": "clear",
+          "time": "day",
+          "sound": false,
+          "showFPS": false
+        },
+        "photo": false,
+        "samples": 0,
+        "camera": [
+          573.8114730314536,
+          3.481651784020824,
+          -76.52320108742478
+        ],
+        "orbit": false,
+        "ground": 0.1875,
+        "render": {
+          "calls": 12,
+          "triangles": 183185
+        },
+        "memory": {
+          "geometries": 13,
+          "textures": 10
+        }
+      }
+    },
+    {
+      "name": "Mobile portrait settings fit viewport",
+      "passed": true,
+      "seconds": 26.583,
+      "data": {
+        "width": 390,
+        "scroll": 390
+      }
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    {
+      "test": "Self-hosted boot and RB19 loading",
+      "text": "using deprecated parameters for the initialization function; pass a single object instead"
+    },
+    {
+      "test": "Settings pause simulation and persist across reload",
+      "text": "using deprecated parameters for the initialization function; pass a single object instead"
+    },
+    {
+      "test": "Genuine path-traced Photo Mode produces samples and exits",
+      "text": "THREE.WebGLRenderer: KHR_parallel_shader_compile extension not supported."
+    },
+    {
+      "test": "Mobile landscape multitouch pedals and steering",
+      "text": "using deprecated parameters for the initialization function; pass a single object instead"
+    }
+  ],
+  "requests": []
+}

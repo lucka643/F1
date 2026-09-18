@@ -1,3 +1,4 @@
+// RELEASE_MODEL_1_0
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
@@ -7,7 +8,7 @@ export const WHEEL_CENTERS = [new THREE.Vector3(.8,-.22,1.77),new THREE.Vector3(
 
 export function createCarVisual(scene, notice) {
   const root=new THREE.Group();scene.add(root);
-  let wheels=[], assembly=new THREE.Group(), spinAngle=0;
+  let wheels=[], assembly=new THREE.Group(), spinAngle=0, modelStatus='loading', loading=null, loadedQuality='';
   root.add(assembly);
   const navy=new THREE.MeshStandardMaterial({color:0x09192e,roughness:.4,metalness:.45});
   const red=new THREE.MeshStandardMaterial({color:0xd81e32,roughness:.4});
@@ -28,7 +29,7 @@ export function createCarVisual(scene, notice) {
     for(const side of [-1,1]){const ring=new THREE.Mesh(new THREE.TorusGeometry(.297,.01,6,32),yellow);ring.rotation.y=Math.PI/2;ring.position.x=side*(i<2?.2:.23);spin.add(ring);box([.01,.035,.4],[side*.234,0,0],yellow,spin);}
   }
   const rearLight=new THREE.Mesh(new THREE.BoxGeometry(.09,.1,.04),new THREE.MeshBasicMaterial({color:0xff2525}));rearLight.position.set(0,-.32,-2.49);root.add(rearLight);
-  function sync(suspension,steering,speed,dt){spinAngle=(spinAngle+speed*dt/.375)%(Math.PI*2);wheels.forEach((w,i)=>{w.pivot.position.y=-(suspension[i]??.22);w.pivot.rotation.y=i<2?steering:0;w.spin.rotation.x=spinAngle;});}
+  function sync(suspension,steering,speed,dt,rotations){spinAngle=(spinAngle+speed*dt/.375)%(Math.PI*2);wheels.forEach((w,i)=>{w.pivot.position.y=-(suspension[i]??.22);w.pivot.rotation.y=i<2?steering:0;w.spin.rotation.x=Number.isFinite(rotations?.[i])?rotations[i]%(Math.PI*2):spinAngle;});}
   // Compact each subset rather than copying the entire car for every wheel.
   function subset(source,indexList){
     const ids=[],map=new Map(),out=[];
@@ -42,10 +43,14 @@ export function createCarVisual(scene, notice) {
     }
     result.setIndex(out);result.computeBoundingSphere();return result;
   }
-  async function loadModel(){
-    const draco=new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/draco/gltf/');
+  async function loadModel(quality='standard'){
+    if(loadedQuality===quality||loadedQuality==='ultra')return;
+    if(loading){await loading;if(loadedQuality===quality||loadedQuality==='ultra')return;}
+    let finish;loading=new Promise(resolve=>{finish=resolve;});
+    if(quality==='ultra')notice('Loading full-resolution RB19 for Ultra…',0);
+    const draco=new DRACOLoader().setDecoderPath(new URL('./vendor/three/examples/jsm/libs/draco/gltf/',import.meta.url).href);
     const loader=new GLTFLoader().setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder);
-    const urls=[new URL('./assets/rb19.glb',import.meta.url).href,'https://raw.githubusercontent.com/vladlen-codes/f1-pitwall/6238d08d9f3a6e6790560525659b30f9cc87d8d4/public/rb19.glb'];
+    const urls=[new URL(quality==='ultra'?'./assets/rb19-ultra.glb':'./assets/rb19.glb',import.meta.url).href];
     let gltf=null;
     try{
       for(const url of urls){try{gltf=await loader.loadAsync(url);break;}catch(error){console.warn('RB19 source unavailable:',url,error.message);}}
@@ -72,8 +77,8 @@ export function createCarVisual(scene, notice) {
       const old=assembly;assembly=next;wheels=nextWheels;root.add(assembly);root.remove(old);
       const disposedGeometry=new Set(),disposedMaterial=new Set();old.traverse(o=>{if(o.geometry&&!disposedGeometry.has(o.geometry)){disposedGeometry.add(o.geometry);o.geometry.dispose();}if(o.material&&!disposedMaterial.has(o.material)){disposedMaterial.add(o.material);o.material.dispose();}});
       gltf.scene.traverse(o=>{if(o.geometry)o.geometry.dispose();});
-      notice('RB19 loaded · drive with the pedals or W A S D',6000);
-    }catch(error){console.warn(error);notice('RB19 loading was interrupted. The temporary car is available.',12000);}finally{draco.dispose();}
+      loadedQuality=quality;modelStatus=quality;notice(quality==='ultra'?'Full-resolution RB19 loaded':'RB19 loaded · drive with the pedals or W A S D',6000);
+    }catch(error){console.warn(error);notice('RB19 loading was interrupted. The temporary car is available.',12000);}finally{draco.dispose();finish();loading=null;}
   }
-  return{root,sync,loadModel,rearLight};
+  return{root,sync,loadModel,rearLight,get modelStatus(){return modelStatus;}};
 }
