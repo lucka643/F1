@@ -1,0 +1,59 @@
+name: Release acceptance tests
+on:
+  workflow_dispatch:
+  push:
+    branches: ['release-1.0']
+    paths: ['.github/workflows/release-qa.yml', 'scripts/browser-test.mjs', 'scripts/physics-test.mjs', 'scripts/upgrade-release.py', 'quality.js', 'scenery.js']
+permissions:
+  contents: write
+concurrency:
+  group: release-acceptance
+  cancel-in-progress: true
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned test dependencies
+        run: |
+          npm install --no-audit --no-fund
+          npm install --no-save --no-audit --no-fund playwright@1.55.1
+          npx playwright install --with-deps chromium
+      - name: Build release source and check syntax
+        run: |
+          python scripts/upgrade-release.py
+          for file in game.js car.js track.js environment.js quality.js scenery.js scripts/browser-test.mjs scripts/physics-test.mjs; do node --check "$file"; done
+          test -s vendor/three/build/three.module.js
+          test -s assets/rb19-ultra.glb
+      - name: Test actual Rapier simulation
+        run: node scripts/physics-test.mjs
+      - name: Browser acceptance and screenshots
+        run: |
+          python -m http.server 8765 --bind 127.0.0.1 >/tmp/f1-server.log 2>&1 &
+          node scripts/browser-test.mjs
+      - name: Save diagnostics on every run
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-report
+          path: |
+            docs/tests/
+            /tmp/f1-server.log
+          retention-days: 14
+      - name: Commit verified build and evidence
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add game.js car.js index.html style.css docs/tests
+          git diff --cached --quiet && exit 0
+          git commit -m 'Publish tested 1.0 build and acceptance evidence [skip ci]'
+          for attempt in 1 2 3; do
+            git pull --rebase origin release-1.0
+            git push origin HEAD:release-1.0 && exit 0
+            sleep 3
+          done
+          exit 1
