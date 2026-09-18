@@ -1,0 +1,19 @@
+name: Package workspace
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/package-workspace.yml']
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package current source
+        run: tar --exclude=.git --exclude=workspace.tar.gz -czf workspace.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: f1-workspace
+          path: workspace.tar.gz
+          retention-days: 7
