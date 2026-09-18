@@ -1,0 +1,69 @@
+name: Prepare realism assets
+on:
+  workflow_dispatch:
+  push:
+    branches: ['release-1.0']
+    paths: ['.github/workflows/realism-assets.yml']
+permissions:
+  contents: write
+jobs:
+  assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Download and optimize openly licensed assets
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs/promises';
+          import {NodeIO} from '@gltf-transform/core';
+          import {ALL_EXTENSIONS} from '@gltf-transform/extensions';
+          import {dedup,prune,weld,simplify,draco,textureCompress} from '@gltf-transform/functions';
+          import {MeshoptSimplifier} from 'meshoptimizer';
+          import draco3d from 'draco3dgltf';
+          import sharp from 'sharp';
+          const dir='assets/realism';await fs.mkdir(dir,{recursive:true});
+          const manifest={license:'CC0',provider:'Poly Haven',files:{},sources:[]};
+          async function get(url){const r=await fetch(url,{headers:{'User-Agent':'F1-Highway-Drive/1.0 (CC0 asset preparation)'}});if(!r.ok)throw new Error(url+' HTTP '+r.status);return r;}
+          function urls(obj,out=[]){if(obj&&typeof obj==='object'){if(typeof obj.url==='string')out.push(obj.url);for(const v of Object.values(obj))if(v&&typeof v==='object')urls(v,out);}return [...new Set(out)];}
+          for(const id of ['asphalt_02','aerial_grass_rock','concrete_floor_worn_001','kloppenheim_05_puresky','tree_small_02']){
+            const metadata=await (await get('https://api.polyhaven.com/files/'+id)).json();
+            await fs.writeFile(dir+'/'+id+'-metadata.json',JSON.stringify(metadata,null,2));manifest.sources.push('https://polyhaven.com/a/'+id);
+            const list=urls(metadata);
+            if(id==='kloppenheim_05_puresky'){
+              const url=list.find(u=>u.endsWith('_2k.hdr'));if(!url)throw new Error('HDR variant missing');await fs.writeFile(dir+'/sky.hdr',new Uint8Array(await (await get(url)).arrayBuffer()));manifest.files.sky='sky.hdr';continue;
+            }
+            if(id==='tree_small_02'){
+              const url=list.find(u=>u.endsWith('_1k.gltf'))||list.find(u=>u.endsWith('_2k.gltf'));if(!url)throw new Error('Tree glTF missing');
+              const io=new NodeIO(fetch).setAllowNetwork(true).registerExtensions(ALL_EXTENSIONS).registerDependencies({'draco3d.encoder':await draco3d.createEncoderModule()});
+              await MeshoptSimplifier.ready;
+              const doc=await io.read(url);
+              await doc.transform(weld(),simplify({simplifier:MeshoptSimplifier,ratio:.13,error:.003}),dedup(),prune(),textureCompress({encoder:sharp,targetFormat:'webp',resize:[1024,1024]}),draco());
+              await io.write(dir+'/tree.glb',doc);manifest.files.tree='tree.glb';continue;
+            }
+            const key=id==='asphalt_02'?'asphalt':id==='aerial_grass_rock'?'grass':'concrete';manifest.files[key]={};
+            for(const type of ['diff','nor_gl','rough']){
+              const url=list.find(u=>u.endsWith('_'+type+'_2k.jpg'))||list.find(u=>u.endsWith('_'+type+'_2k.png'));if(!url)throw new Error(id+' '+type+' variant missing');
+              const data=new Uint8Array(await (await get(url)).arrayBuffer()),name=key+'-'+type+'.webp';await sharp(data).webp({quality:92}).toFile(dir+'/'+name);manifest.files[key][type]=name;
+            }
+          }
+          await fs.writeFile(dir+'/manifest.json',JSON.stringify(manifest,null,2));
+          JS
+      - name: Commit prepared assets
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/realism
+          git commit -m 'Add CC0 sky, scanned surfaces and natural tree model [skip ci]'
+          git pull --rebase origin release-1.0
+          git push origin HEAD:release-1.0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: realism-assets
+          path: assets/realism/
+          retention-days: 7
