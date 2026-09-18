@@ -1,0 +1,72 @@
+name: Prepare release assets
+on:
+  workflow_dispatch:
+  push:
+    branches: ['release-1.0']
+    paths: ['.github/workflows/release-assets.yml']
+permissions:
+  contents: write
+jobs:
+  assets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned asset tools
+        run: |
+          npm install --no-audit --no-fund
+      - name: Prepare engine files and Ultra model
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs/promises';
+          import path from 'node:path';
+          import crypto from 'node:crypto';
+          import {NodeIO} from '@gltf-transform/core';
+          import {ALL_EXTENSIONS} from '@gltf-transform/extensions';
+          import {dedup,prune,draco,textureCompress} from '@gltf-transform/functions';
+          import draco3d from 'draco3dgltf';
+          import sharp from 'sharp';
+          async function copy(source,destination){await fs.mkdir(path.dirname(destination),{recursive:true});await fs.cp(source,destination,{recursive:true});}
+          await copy('node_modules/three/build','vendor/three/build');
+          await copy('node_modules/three/examples/jsm','vendor/three/examples/jsm');
+          await copy('node_modules/three/LICENSE','vendor/three/LICENSE');
+          for(const p of ['three-mesh-bvh','three-gpu-pathtracer']){
+            await copy('node_modules/'+p+'/build','vendor/'+p+'/build');
+            await copy('node_modules/'+p+'/LICENSE','vendor/'+p+'/LICENSE');
+          }
+          await copy('node_modules/@dimforge/rapier3d-compat/rapier.es.js','vendor/rapier/rapier.es.js');
+          await copy('node_modules/@dimforge/rapier3d-compat/LICENSE','vendor/rapier/LICENSE');
+          const source='https://raw.githubusercontent.com/vladlen-codes/f1-pitwall/6238d08d9f3a6e6790560525659b30f9cc87d8d4/public/oracle_red_bull_f1_car_rb19_2023.glb';
+          const response=await fetch(source);if(!response.ok)throw new Error('Model HTTP '+response.status);
+          const bytes=new Uint8Array(await response.arrayBuffer());
+          const hash=crypto.createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
+          if(hash!=='4a0d89cd437c82ed77454280ab5a6446661e52e1')throw new Error('Original uploaded car checksum does not match');
+          const io=new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({'draco3d.encoder':await draco3d.createEncoderModule()});
+          const doc=await io.readBinary(bytes);
+          await doc.transform(dedup(),prune(),textureCompress({encoder:sharp,targetFormat:'webp',lossless:true}),draco({quantizePosition:16,quantizeTexcoord:16,quantizeNormal:12}));
+          await io.write('assets/rb19-ultra.glb',doc);
+          await fs.writeFile('assets/ultra-manifest.json',JSON.stringify({source,sourceGitBlob:hash,sourceBytes:bytes.length,geometrySimplified:false,texturesResized:false,textureCompression:'lossless WebP',three:'0.180.0',rapier:'0.17.3',pathTracer:'0.0.24'},null,2));
+          JS
+      - name: Commit assets on release branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add vendor assets/rb19-ultra.glb assets/ultra-manifest.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'Add self-hosted render engines and full-resolution Ultra RB19 [skip ci]'
+          for attempt in 1 2 3; do
+            git pull --rebase origin release-1.0
+            git push origin HEAD:release-1.0 && exit 0
+            sleep 3
+          done
+          exit 1
+      - name: Package engine snapshot
+        run: tar --exclude=.git --exclude=node_modules -czf /tmp/release-assets.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: /tmp/release-assets.tar.gz
+          retention-days: 7
