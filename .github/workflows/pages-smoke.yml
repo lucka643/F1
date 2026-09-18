@@ -1,0 +1,33 @@
+name: Live Pages smoke test
+on:
+  workflow_dispatch:
+  push:
+    branches: ['main']
+    paths: ['index.html', 'game.js', 'car.js', 'track.js', 'quality.js', 'realism.js', 'scenery.js', 'environment.js', 'assets/**', 'scripts/live-smoke.mjs', '.github/workflows/pages-smoke.yml']
+permissions:
+  contents: read
+concurrency:
+  group: live-pages-check
+  cancel-in-progress: true
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test runtime
+        run: |
+          npm install --no-audit --no-fund
+          npm install --no-save --no-audit --no-fund playwright@1.55.1
+          npx playwright install --with-deps chromium
+      - name: Verify published game and Ultra rendering
+        run: node scripts/live-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-pages-evidence
+          path: live-check/
+          retention-days: 14
