@@ -1,0 +1,11 @@
+{
+  "source": "https://raw.githubusercontent.com/vladlen-codes/f1-pitwall/6238d08d9f3a6e6790560525659b30f9cc87d8d4/public/oracle_red_bull_f1_car_rb19_2023.glb",
+  "sourceGitBlob": "4a0d89cd437c82ed77454280ab5a6446661e52e1",
+  "sourceBytes": 54470372,
+  "geometrySimplified": false,
+  "texturesResized": false,
+  "textureCompression": "lossless WebP",
+  "three": "0.180.0",
+  "rapier": "0.17.3",
+  "pathTracer": "0.0.24"
+}
