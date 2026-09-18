@@ -1,0 +1,39 @@
+name: Fetch preview car asset
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fetch-preview-model.yml'
+permissions:
+  contents: write
+jobs:
+  copy-model:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the attributed RB19 preview asset
+        shell: python
+        run: |
+          import pathlib, urllib.request
+          destination = pathlib.Path('assets/rb19.glb')
+          destination.parent.mkdir(parents=True, exist_ok=True)
+          url = 'https://raw.githubusercontent.com/vladlen-codes/f1-pitwall/6238d08d9f3a6e6790560525659b30f9cc87d8d4/public/rb19.glb'
+          request = urllib.request.Request(url, headers={'User-Agent': 'F1-Preview-Asset-Publisher'})
+          with urllib.request.urlopen(request, timeout=90) as response:
+              data = response.read()
+          if data[:4] != b'glTF':
+              raise RuntimeError('The model download did not return a GLB file.')
+          destination.write_bytes(data)
+      - name: Commit the model file
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/rb19.glb
+          git diff --cached --quiet && exit 0
+          git commit -m 'Add optimized RB19 GLB for the playable preview'
+          for attempt in 1 2 3; do
+            git pull --rebase origin main
+            git push origin HEAD:main && exit 0
+            sleep 3
+          done
+          exit 1
