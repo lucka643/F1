@@ -20,6 +20,7 @@ jobs:
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs/promises';
+          import crypto from 'node:crypto';
           import {NodeIO} from '@gltf-transform/core';
           import {ALL_EXTENSIONS} from '@gltf-transform/extensions';
           import {dedup,prune,weld,simplify,draco,textureCompress} from '@gltf-transform/functions';
@@ -38,11 +39,12 @@ jobs:
               const url=list.find(u=>u.endsWith('_2k.hdr'));if(!url)throw new Error('HDR variant missing');await fs.writeFile(dir+'/sky.hdr',new Uint8Array(await (await get(url)).arrayBuffer()));manifest.files.sky='sky.hdr';continue;
             }
             if(id==='tree_small_02'){
-              const url=list.find(u=>u.endsWith('_1k.gltf'))||list.find(u=>u.endsWith('_2k.gltf'));if(!url)throw new Error('Tree glTF missing');
-              const io=new NodeIO(fetch).setAllowNetwork(true).registerExtensions(ALL_EXTENSIONS).registerDependencies({'draco3d.encoder':await draco3d.createEncoderModule()});
-              await MeshoptSimplifier.ready;
-              const doc=await io.read(url);
-              await doc.transform(weld(),simplify({simplifier:MeshoptSimplifier,ratio:.13,error:.003}),dedup(),prune(),textureCompress({encoder:sharp,targetFormat:'webp',resize:[1024,1024]}),draco());
+              const variant=metadata.gltf['1k'].gltf,json=await (await get(variant.url)).json(),resources={};
+              await Promise.all(Object.entries(variant.include).map(async([name,file])=>{const bytes=new Uint8Array(await (await get(file.url)).arrayBuffer());const md5=crypto.createHash('md5').update(bytes).digest('hex');if(file.md5&&md5!==file.md5)throw new Error('Tree resource checksum '+name);resources[name]=bytes;}));
+              const io=new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({'draco3d.encoder':await draco3d.createEncoderModule()});
+              await MeshoptSimplifier.ready;const doc=await io.readJSON({json,resources});
+              await doc.transform(weld(),simplify({simplifier:MeshoptSimplifier,ratio:.04,error:.025}),dedup(),prune(),textureCompress({encoder:sharp,targetFormat:'webp',resize:[1024,1024]}),draco());
+              const triangles=doc.getRoot().listMeshes().reduce((n,m)=>n+m.listPrimitives().reduce((n,p)=>n+(p.getIndices()?.getCount()||p.getAttribute('POSITION').getCount())/3,0),0);console.log('Prepared tree triangles:',triangles);manifest.treeTriangles=triangles;
               await io.write(dir+'/tree.glb',doc);manifest.files.tree='tree.glb';continue;
             }
             const key=id==='asphalt_02'?'asphalt':id==='aerial_grass_rock'?'grass':'concrete';manifest.files[key]={};
