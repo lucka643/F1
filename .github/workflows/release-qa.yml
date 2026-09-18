@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: ['release-1.0']
-    paths: ['.github/workflows/release-qa.yml', 'scripts/browser-test.mjs', 'scripts/physics-test.mjs', 'scripts/upgrade-release.py', 'quality.js', 'scenery.js']
+    paths: ['.github/workflows/release-qa.yml', 'scripts/browser-test.mjs', 'scripts/physics-test.mjs', 'scripts/upgrade-release.py', 'scripts/polish-release.py', 'quality.js', 'scenery.js', 'realism.js']
 permissions:
   contents: write
 concurrency:
@@ -26,9 +26,12 @@ jobs:
       - name: Build release source and check syntax
         run: |
           python scripts/upgrade-release.py
-          for file in game.js car.js track.js environment.js quality.js scenery.js scripts/browser-test.mjs scripts/physics-test.mjs; do node --check "$file"; done
+          python scripts/polish-release.py
+          for file in game.js car.js track.js environment.js quality.js scenery.js realism.js scripts/browser-test.mjs scripts/physics-test.mjs; do node --check "$file"; done
           test -s vendor/three/build/three.module.js
           test -s assets/rb19-ultra.glb
+          test -s assets/realism/manifest.json
+          test -s assets/realism/tree.glb
       - name: Test actual Rapier simulation
         run: node scripts/physics-test.mjs
       - name: Browser acceptance and screenshots
@@ -48,9 +51,9 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add game.js car.js index.html style.css docs/tests
+          git add game.js car.js track.js quality.js realism.js index.html style.css docs/tests
           git diff --cached --quiet && exit 0
-          git commit -m 'Publish tested 1.0 build and acceptance evidence [skip ci]'
+          git commit -m 'Publish verified HDR scenery build and acceptance evidence [skip ci]'
           for attempt in 1 2 3; do
             git pull --rebase origin release-1.0
             git push origin HEAD:release-1.0 && exit 0
