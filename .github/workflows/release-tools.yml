@@ -1,0 +1,19 @@
+name: Release workspace
+on:
+  push:
+    paths: ['.github/workflows/release-tools.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  workspace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package current source
+        run: tar --exclude=.git -czf /tmp/f1-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: f1-source
+          path: /tmp/f1-source.tar.gz
+          retention-days: 7
