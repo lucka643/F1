@@ -1,0 +1,28 @@
+name: Prepare game build tools
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/prepare-build.yml'
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned game dependencies
+        run: |
+          mkdir tools && cd tools
+          npm init -y
+          npm install --no-audit --no-fund three@0.180.0 @dimforge/rapier3d-compat@0.17.3 three-mesh-bvh@0.9.1
+          npm install --save-dev --no-audit --no-fund vite@7.1.7 typescript@5.9.2 @types/three@0.180.0 @gltf-transform/cli@4.2.1 @gltf-transform/core@4.2.1 @gltf-transform/extensions@4.2.1 @gltf-transform/functions@4.2.1 meshoptimizer@0.23.0 draco3dgltf@1.5.7 sharp@0.34.4
+          cd ..
+          tar -czf game-build-tools.tar.gz tools
+      - uses: actions/upload-artifact@v4
+        with:
+          name: game-build-tools
+          path: game-build-tools.tar.gz
+          retention-days: 3
