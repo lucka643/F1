@@ -51,7 +51,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add game.js car.js track.js quality.js realism.js index.html style.css docs/tests
+          git add game.js car.js track.js quality.js realism.js index.html style.css scripts/browser-test.mjs docs/tests
           git diff --cached --quiet && exit 0
           git commit -m 'Publish verified HDR scenery build and acceptance evidence [skip ci]'
           for attempt in 1 2 3; do
