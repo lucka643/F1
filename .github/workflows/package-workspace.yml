@@ -11,9 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Package current source
-        run: tar --exclude=.git --exclude=workspace.tar.gz -czf workspace.tar.gz .
+        run: tar --exclude=.git -czf /tmp/workspace.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
           name: f1-workspace
-          path: workspace.tar.gz
+          path: /tmp/workspace.tar.gz
           retention-days: 7
