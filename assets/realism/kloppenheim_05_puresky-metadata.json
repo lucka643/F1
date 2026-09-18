@@ -1,0 +1,81 @@
+{
+  "tonemapped": {
+    "size": 15899272,
+    "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/kloppenheim_05_puresky.jpg",
+    "md5": "eb5ccb8e34091820dbe96679bcbc6e4f"
+  },
+  "hdri": {
+    "8k": {
+      "hdr": {
+        "size": 63978009,
+        "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/8k/kloppenheim_05_puresky_8k.hdr",
+        "md5": "1e83209747ea6c6d9a4b8028a71d6512"
+      },
+      "exr": {
+        "size": 281127526,
+        "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/8k/kloppenheim_05_puresky_8k.exr",
+        "md5": "e41280c6979ea0ce708cb4f1b5f1160c"
+      }
+    },
+    "16k": {
+      "hdr": {
+        "size": 191521554,
+        "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/16k%2B/kloppenheim_05_puresky_16k.hdr",
+        "md5": "523cc619af31655766f9f7f0635386ad"
+      },
+      "exr": {
+        "size": 1075832942,
+        "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/16k%2B/kloppenheim_05_puresky_16k.exr",
+        "md5": "2873db65eb70aac5dbb2f0518838fa23"
+      }
+    },
+    "4k": {
+      "hdr": {
+        "size": 16098667,
+        "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/kloppenheim_05_puresky_4k.hdr",
+        "md5": "7e626c52b9566fea733485bcf12bd5e3"
+      },
+      "exr": {
+        "size": 72321237,
+        "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/4k/kloppenheim_05_puresky_4k.exr",
+        "md5": "ec5713efc22868c2a91bbfbc57e3151d"
+      }
+    },
+    "2k": {
+      "hdr": {
+        "size": 3966045,
+        "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/kloppenheim_05_puresky_2k.hdr",
+        "md5": "adb05080152dc9ee44ca41d6452748e4"
+      },
+      "exr": {
+        "size": 19055558,
+        "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/2k/kloppenheim_05_puresky_2k.exr",
+        "md5": "cfc20e66073ee1dca2bc6f4096c1c04f"
+      }
+    },
+    "24k": {
+      "hdr": {
+        "size": 414151585,
+        "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/16k%2B/kloppenheim_05_puresky_24k.hdr",
+        "md5": "f6ee12cd278eee8777b2245578e52055"
+      },
+      "exr": {
+        "size": 2432455087,
+        "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/16k%2B/kloppenheim_05_puresky_24k.exr",
+        "md5": "ed4de2d9015d866df30c0c3e34512e3c"
+      }
+    },
+    "1k": {
+      "hdr": {
+        "size": 1086297,
+        "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloppenheim_05_puresky_1k.hdr",
+        "md5": "fe0d85219b08932d0467c3752012b749"
+      },
+      "exr": {
+        "size": 5209540,
+        "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/1k/kloppenheim_05_puresky_1k.exr",
+        "md5": "3c50893110e6c2958c22c7b085cee32c"
+      }
+    }
+  }
+}

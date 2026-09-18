@@ -1,0 +1,31 @@
+{
+  "license": "CC0",
+  "provider": "Poly Haven",
+  "files": {
+    "asphalt": {
+      "diff": "asphalt-diff.webp",
+      "nor_gl": "asphalt-nor_gl.webp",
+      "rough": "asphalt-rough.webp"
+    },
+    "grass": {
+      "diff": "grass-diff.webp",
+      "nor_gl": "grass-nor_gl.webp",
+      "rough": "grass-rough.webp"
+    },
+    "concrete": {
+      "diff": "concrete-diff.webp",
+      "nor_gl": "concrete-nor_gl.webp",
+      "rough": "concrete-rough.webp"
+    },
+    "sky": "sky.hdr",
+    "tree": "tree.glb"
+  },
+  "sources": [
+    "https://polyhaven.com/a/asphalt_02",
+    "https://polyhaven.com/a/aerial_grass_rock",
+    "https://polyhaven.com/a/concrete_floor_worn_001",
+    "https://polyhaven.com/a/kloppenheim_05_puresky",
+    "https://polyhaven.com/a/tree_small_02"
+  ],
+  "treeTriangles": 86166
+}
