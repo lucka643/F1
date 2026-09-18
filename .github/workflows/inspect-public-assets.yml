@@ -1,0 +1,24 @@
+name: Inspect public asset sources
+on:
+  push:
+    paths: ['.github/workflows/inspect-public-assets.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read public model metadata
+        run: |
+          mkdir -p metadata
+          for id in e4afe46f3aab4b23a418da06fc163821 e8b1859b628a42209b8866d9a4b45936; do
+            curl --max-time 30 -L -sS -D metadata/$id.headers https://sketchfab.com/i/models/$id -o metadata/$id.json || true
+            curl --max-time 30 -L -sS https://sketchfab.com/i/models/$id/textures -o metadata/$id-textures.json || true
+            curl --max-time 30 -L -sS https://api.sketchfab.com/v3/models/$id -o metadata/$id-public.json || true
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-asset-metadata
+          path: metadata
+          retention-days: 3
