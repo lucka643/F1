@@ -1,30 +1,44 @@
-# Asset credits and preview notes
+# Asset credits and build notes
 
 ## Oracle Red Bull F1 Car RB19 2023
 
-- Author: **Redgrund**, https://sketchfab.com/redgrund
-- Original model: https://sketchfab.com/3d-models/oracle-red-bull-f1-car-rb19-2023-e4afe46f3aab4b23a418da06fc163821
-- License stated in the supplied model: **Creative Commons Attribution 4.0 International**, https://creativecommons.org/licenses/by/4.0/
-- The preview uses a compressed, WebP-textured version of the same model, redistributed in `assets/rb19.glb`.
-- Compact-model source: https://github.com/vladlen-codes/f1-pitwall/blob/6238d08d9f3a6e6790560525659b30f9cc87d8d4/public/rb19.glb
-- Preview modifications: model scale and origin normalization, wheel-region separation, steering pivots and wheel-spin animation. The temporary geometric loading car is separate from this asset.
+Author: **Redgrund**, https://sketchfab.com/redgrund
+
+Original model: https://sketchfab.com/3d-models/oracle-red-bull-f1-car-rb19-2023-e4afe46f3aab4b23a418da06fc163821
+
+License stated in the supplied model: **Creative Commons Attribution 4.0 International**, https://creativecommons.org/licenses/by/4.0/
+
+The regular car uses the compressed WebP-textured version of the supplied model in `assets/rb19.glb`. Its source is https://github.com/vladlen-codes/f1-pitwall/blob/6238d08d9f3a6e6790560525659b30f9cc87d8d4/public/rb19.glb.
+
+The Ultra car is prepared from the exact original 54,470,372-byte GLB. Its Git blob checksum is checked during preparation, and provenance is recorded in `assets/ultra-manifest.json`. The Ultra preparation does not simplify triangles or resize source textures. It uses Draco geometry quantization/compression and lossless WebP texture packaging. These are not invented higher-resolution textures.
+
+Game modifications include scale/origin normalization, wheel-region separation, steering pivots, suspension movement and wheel-spin animation. The temporary geometric loading car is separate from this asset.
 
 ## NFS Undercover DS — Highway Battle
 
-- Author/uploader credited by the supplied GLB: **amogusstrikesback2**, https://sketchfab.com/amogusstrikesback2
-- Original model: https://sketchfab.com/3d-models/nfs-undercover-ds-highway-battle-e8b1859b628a42209b8866d9a4b45936
-- License stated in the supplied model: **Creative Commons Attribution 4.0 International**, https://creativecommons.org/licenses/by/4.0/
-- Preview modifications: roadway meshes extracted, merged and rescaled; compressed geometry stored in `assets/highway-road.b64`; generated surface materials, collision barriers and simplified scenery added. This preview does not reproduce the original model's complete scenery or original textures.
+Author/uploader credited by the supplied GLB: **amogusstrikesback2**, https://sketchfab.com/amogusstrikesback2
 
-The names, liveries, logos and trademarks appearing on supplied assets remain those of their respective owners. Asset attribution does not imply endorsement or grant separate trademark rights. This project is not an official Formula 1, Red Bull, Oracle or Need for Speed product.
+Original model: https://sketchfab.com/3d-models/nfs-undercover-ds-highway-battle-e8b1859b628a42209b8866d9a4b45936
+
+License stated in the supplied model: **Creative Commons Attribution 4.0 International**, https://creativecommons.org/licenses/by/4.0/
+
+Roadway meshes are extracted, merged and rescaled in `assets/highway-road.b64`. The game adds generated asphalt, collision barriers, embankments, buildings, facades, vegetation and lighting. It preserves the supplied road geometry, not the original model's complete scenery or original texture set. The original environment is not a photorealistic asset, and the reconstruction does not claim to be one.
+
+Names, liveries, logos and trademarks appearing on the supplied assets remain those of their respective owners. Attribution does not imply endorsement or grant separate trademark rights. This is not an official Formula 1, Red Bull, Oracle or Need for Speed product.
 
 ## Runtime libraries
 
 - Three.js 0.180.0, MIT: https://github.com/mrdoob/three.js
-- Rapier 3D JavaScript compatibility package 0.17.3, Apache 2.0: https://github.com/dimforge/rapier.js
+- Rapier JavaScript compatibility package 0.17.3, Apache 2.0: https://github.com/dimforge/rapier.js
+- three-mesh-bvh 0.9.1, MIT: https://github.com/gkjohnson/three-mesh-bvh
+- three-gpu-pathtracer 0.0.24, MIT: https://github.com/gkjohnson/three-gpu-pathtracer
 - Draco decoder, Apache 2.0: https://github.com/google/draco
 - Meshoptimizer decoder, MIT: https://github.com/zeux/meshoptimizer
 
-## Build status
+Runtime packages and their available licenses are distributed under `vendor/`. The Rapier package omits a license file, so its upstream Apache 2.0 license is included separately.
 
-Preview 0.1 is supplied for the user's first playtest. Its menus and runtime include touch/keyboard driving, chassis collision geometry, ray-cast suspension, grip and downforce controls, camera presets, stationary orbit/zoom, weather/time settings and quality presets. This is not a validated simulation of the real RB19. Full scene fidelity, final physics tuning and high-end rendering are unfinished. **No ray-traced rendering is included in this preview.**
+## Rendering and simulation scope
+
+Ultra driving uses rasterized HDR rendering with ambient occlusion, screen-space and environment-map reflections, bloom and shadow maps. **Ray tracing is genuine progressive path tracing in parked Photo Mode, not hardware RTX while driving.** The road environment is rebuilt and the physics are game-oriented rather than a measured real-RB19 vehicle model.
+
+Test source and results are in `scripts/` and `docs/tests/`. Automated desktop/mobile-viewport browser tests are not a substitute for testing on every physical device.
