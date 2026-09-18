@@ -22,9 +22,21 @@ Original model: https://sketchfab.com/3d-models/nfs-undercover-ds-highway-battle
 
 License stated in the supplied model: **Creative Commons Attribution 4.0 International**, https://creativecommons.org/licenses/by/4.0/
 
-Roadway meshes are extracted, merged and rescaled in `assets/highway-road.b64`. The game adds generated asphalt, collision barriers, embankments, buildings, facades, vegetation and lighting. It preserves the supplied road geometry, not the original model's complete scenery or original texture set. The original environment is not a photorealistic asset, and the reconstruction does not claim to be one.
+Roadway meshes are extracted, merged and rescaled in `assets/highway-road.b64`. The game adds scanned surface materials, collision barriers, embankments, buildings, facades, vegetation, distant terrain and lighting. It preserves the supplied road geometry, not the original model's complete scenery or original texture set. The original environment is not a photorealistic asset, and this reconstruction is not a full reproduction of the source game.
 
 Names, liveries, logos and trademarks appearing on the supplied assets remain those of their respective owners. Attribution does not imply endorsement or grant separate trademark rights. This is not an official Formula 1, Red Bull, Oracle or Need for Speed product.
+
+## Poly Haven photographic assets — CC0
+
+Source files and download metadata are recorded in `assets/realism/`. These assets are distributed by **Poly Haven** under CC0: https://polyhaven.com/license
+
+- Asphalt 02: https://polyhaven.com/a/asphalt_02
+- Aerial Grass Rock: https://polyhaven.com/a/aerial_grass_rock
+- Concrete Floor Worn 001: https://polyhaven.com/a/concrete_floor_worn_001
+- Kloppenheim 05 PureSky: https://polyhaven.com/a/kloppenheim_05_puresky
+- Tree Small 02: https://polyhaven.com/a/tree_small_02
+
+Surface color, normal and roughness maps are packaged at 2K in WebP format. The lighting environment is a 2K HDR panorama. The tree is simplified and Draco-compressed, with 1K WebP textures, and placed in spatially culled instance clusters. Source texture licenses do not apply to the separate branded car or extracted road assets above.
 
 ## Runtime libraries
 
