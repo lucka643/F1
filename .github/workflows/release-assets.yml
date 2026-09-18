@@ -15,8 +15,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install pinned asset tools
-        run: |
-          npm install --no-audit --no-fund
+        run: npm install --no-audit --no-fund
       - name: Prepare engine files and Ultra model
         shell: bash
         run: |
@@ -38,7 +37,9 @@ jobs:
             await copy('node_modules/'+p+'/LICENSE','vendor/'+p+'/LICENSE');
           }
           await copy('node_modules/@dimforge/rapier3d-compat/rapier.es.js','vendor/rapier/rapier.es.js');
-          await copy('node_modules/@dimforge/rapier3d-compat/LICENSE','vendor/rapier/LICENSE');
+          const license=await fetch('https://raw.githubusercontent.com/dimforge/rapier/master/LICENSE');
+          if(!license.ok)throw new Error('Rapier license HTTP '+license.status);
+          await fs.writeFile('vendor/rapier/LICENSE',await license.text());
           const source='https://raw.githubusercontent.com/vladlen-codes/f1-pitwall/6238d08d9f3a6e6790560525659b30f9cc87d8d4/public/oracle_red_bull_f1_car_rb19_2023.glb';
           const response=await fetch(source);if(!response.ok)throw new Error('Model HTTP '+response.status);
           const bytes=new Uint8Array(await response.arrayBuffer());
