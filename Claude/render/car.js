@@ -34,6 +34,37 @@ const DRACO_PATH = new URL('../../Codex/vendor/three/examples/jsm/libs/draco/glt
 /** Half-extents of the box used to claim triangles for each wheel. */
 const WHEEL_BOX = { x: 0.275, y: 0.425, z: 0.44 };
 
+
+/**
+ * Convert quantized attributes to plain float32.
+ *
+ * rb19.glb ships KHR_mesh_quantization, so its positions arrive as NORMALIZED
+ * INTEGERS — the real value is the stored integer scaled by the type's range,
+ * and the node transform denormalizes it. Calling geometry.applyMatrix4() on
+ * such an attribute writes float results straight back into the integer buffer,
+ * which silently destroys the mesh: the car came out 2 m long instead of 5.53,
+ * and the wheel-extraction boxes then matched nothing, so it lost all four
+ * wheels. Reading through getX/getY/getZ honours the normalization, so we
+ * rebuild each attribute as float32 before any transform touches it.
+ */
+function dequantize(geometry) {
+  for (const [name, attribute] of Object.entries(geometry.attributes)) {
+    const needsConversion = attribute.normalized || !(attribute.array instanceof Float32Array);
+    if (!needsConversion || attribute.itemSize > 4) continue;
+    const size = attribute.itemSize;
+    const values = new Float32Array(attribute.count * size);
+    for (let i = 0; i < attribute.count; i++) {
+      const o = i * size;
+      values[o] = attribute.getX(i);
+      if (size > 1) values[o + 1] = attribute.getY(i);
+      if (size > 2) values[o + 2] = attribute.getZ(i);
+      if (size > 3) values[o + 3] = attribute.getW(i);
+    }
+    geometry.setAttribute(name, new THREE.BufferAttribute(values, size));
+  }
+  return geometry;
+}
+
 /**
  * Rebuild a geometry from a subset of its triangles, compacting the vertex
  * arrays so each wheel does not carry a copy of the whole car's attributes.
@@ -241,6 +272,8 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
     draco.dispose();
   }
 
+  // De-quantize every mesh before anything measures or transforms it.
+  gltf.scene.traverse(object => { if (object.isMesh && object.geometry) dequantize(object.geometry); });
   gltf.scene.updateMatrixWorld(true);
   const bounds = new THREE.Box3().setFromObject(gltf.scene);
   const size = bounds.getSize(new THREE.Vector3());
@@ -273,7 +306,7 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
   gltf.scene.traverse(object => {
     if (!object.isMesh || !object.geometry?.attributes.position) return;
 
-    const geometry = object.geometry.clone();
+    const geometry = dequantize(object.geometry.clone());
     geometry.applyMatrix4(object.matrixWorld);
     geometry.translate(-origin.x, -origin.y, -origin.z);
     geometry.scale(scale, scale, scale);
@@ -322,6 +355,15 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
 
   // Release the loader's copy; ours is rebuilt.
   gltf.scene.traverse(object => object.geometry?.dispose());
+
+  // Sanity-check the result instead of silently shipping a broken car.
+  const measured = new THREE.Box3().setFromObject(root);
+  const measuredSize = measured.getSize(new THREE.Vector3());
+  const emptyWheels = wheels.filter(w => w.spin.children.length === 0).length;
+  if (Math.abs(measuredSize.z - CAR_LENGTH) > 0.6 || emptyWheels > 0) {
+    console.warn(`RB19 assembly looks wrong: length ${measuredSize.z.toFixed(2)} m ` +
+      `(expected ${CAR_LENGTH}), ${emptyWheels} wheel group(s) empty.`);
+  }
 
   /**
    * Push one physics frame into the visual model.
