@@ -380,7 +380,9 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
       // Suspension travel moves the hub up and down in car space.
       wheel.steer.position.y = wheel.centre.y + (data.suspensionOffset ?? 0);
       // Negated: physics measures steer about the car's true right (-X),
-      // while a Y rotation in model space turns the opposite way.
+      // while a Y rotation in model space turns the opposite way. Applied
+      // directly with no extra smoothing — the shaping already happened in the
+      // sim, and damping it twice is what makes wheels look slow to react.
       wheel.steer.rotation.y = -(data.steerAngle ?? 0);
       wheel.spin.rotation.x = data.spinAngle ?? 0;
     }

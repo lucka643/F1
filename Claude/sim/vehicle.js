@@ -205,13 +205,23 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
     shaped.throttle = clamp(shaped.throttle, 0, 1);
     shaped.brake = clamp(shaped.brake, 0, 1);
 
-    // Steering: the faster you go, the less lock you are allowed and the slower
-    // you are allowed to apply it. Without this a keyboard tap at 300 km/h
-    // spins the car instantly and the game is unplayable.
+    // Steering is rate-limited, not target-limited. How far the wheels end up
+    // turned depends on how long you hold the key; how FAST they get there is
+    // near-constant. Previously the target was scaled by speed as well as the
+    // geometric lock limit in the physics below — two limiters compounding,
+    // which made the wheels feel dead exactly when you needed them.
+    //
+    // Only the rate tapers with speed now, and gently: a tap gives a small but
+    // immediate movement, a held key keeps winding on lock.
     const sensitivity = settings?.steeringSensitivity ?? 1;
-    const speedFactor = 1 / (1 + speed * 0.055);
-    const rate = (2.6 + speedFactor * 2.4) * sensitivity;
-    const target = input.steer * speedFactor * sensitivity;
+    const speedFactor = 1 / (1 + speed * 0.012);
+    const target = clamp(input.steer, -1, 1) * sensitivity;
+
+    // Centring is faster than turning, so releasing snaps the wheels straight
+    // rather than letting the car wander on after you let go.
+    const turning = Math.abs(target) > 0.01 && Math.sign(target) === Math.sign(shaped.steer || target);
+    const rate = (turning ? 9.0 : 14.0) * (0.55 + 0.45 * speedFactor) * sensitivity;
+
     shaped.steer += clamp(target - shaped.steer, -rate * dt, rate * dt);
     shaped.steer = clamp(shaped.steer, -1, 1);
     return shaped;
@@ -533,7 +543,7 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
     /* --- steering --- */
     // Maximum lock falls with speed; this is the geometric limit, on top of the
     // rate limit applied in shapeInput.
-    const maxLock = 0.42 / (1 + absSpeed * 0.021);
+    const maxLock = 0.44 / (1 + absSpeed * 0.016);
     state.steerAngle = shaped.steer * maxLock;
     for (const wheel of wheels) {
       if (!wheel.front) continue;
