@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#091321">
+<title>F1 Highway Drive | 1.0</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23091321'/%3E%3Cpath d='M13 18h42L44 28H25l-4 6h19l-10 9H17l-6 9H2z' fill='%23ffd84a'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./style.css?v=release-1">
+<script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/examples/jsm/","rapier":"./vendor/rapier/rapier.es.js","three/examples/jsm/":"./vendor/three/examples/jsm/","three-mesh-bvh":"./vendor/three-mesh-bvh/build/index.module.js","three-gpu-pathtracer":"./vendor/three-gpu-pathtracer/build/index.module.js"}}</script>
+</head>
+<body>
+<canvas id="game" aria-label="3D driving game"></canvas>
+<section id="loading" class="cover">
+  <div class="intro"><div class="eyebrow">RB19 / HIGHWAY BATTLE</div><h1>HIGHWAY<span>DRIVE</span></h1><div class="badge">DRIVING BUILD · 1.0</div><p id="load-message" role="status" aria-live="polite">Loading the renderer and physics engine…</p><div id="load-line" class="load-line"></div><button id="start" class="primary" disabled>Loading…</button><button id="retry" hidden onclick="location.reload()">Reload</button><p class="small">The supplied highway road mesh, rebuilt scenery and the RB19.<br>All engine and model files are hosted with this game.</p><p class="small">Touch controls or W A S D / arrow keys. R resets. C changes camera.</p></div>
+</section>
+<div id="hud" hidden>
+  <button id="menu" class="corner glass" aria-label="Open settings" title="Settings (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg></button>
+  <button id="reset" class="corner glass" aria-label="Respawn car" title="Respawn (R)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/></svg></button>
+  <div class="session"><span class="live-dot"></span> HIGHWAY DRIVE <b>1.0</b></div>
+  <div id="notice" role="status">Loading RB19 model…</div>
+  <div id="telemetry"><div class="speed-row"><strong id="speed">0</strong><span>KM/H</span><b id="gear">N</b></div><div class="rpm-track"><i id="rpm"></i></div><div class="telemetry-bottom"><span id="surface">DRY</span><span id="camera-name">CHASE</span></div></div>
+  <div id="fps" hidden>0 FPS</div>
+  <div class="pedals"><button class="drive-button glass" data-control="throttle" aria-label="Accelerate"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M50 23 82 75H18Z"/></svg><span>THROTTLE</span></button><button class="drive-button glass" data-control="brake" aria-label="Brake; hold at a stop to reverse"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M18 25h64L50 77Z"/></svg><span>BRAKE / REVERSE</span></button></div>
+  <div class="steering"><button class="drive-button glass" data-control="left" aria-label="Steer left"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M23 50 75 18v64Z"/></svg></button><button class="drive-button glass" data-control="right" aria-label="Steer right"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M25 18v64l52-32Z"/></svg></button></div>
+  <div id="hint">Drag / pinch to look around when stopped</div>
+</div>
+<dialog id="settings">
+  <header><div><div class="eyebrow">PAUSED</div><h2>Drive settings</h2></div><button id="close-settings" class="close" aria-label="Close settings">×</button></header>
+  <div class="settings-grid">
+    <fieldset><legend>VIEW</legend><label>Camera<select id="camera"><option value="chase">Chase</option><option value="close">Close chase</option><option value="tv">TV pod</option><option value="cockpit">Cockpit</option><option value="nose">Nose camera</option><option value="top">Top down</option></select></label><label>Field of view <output id="fov-value"></output><input id="fov" type="range" min="40" max="100" step="1"></label><label>Chase distance <output id="distance-value"></output><input id="distance" type="range" min="5" max="18" step="0.5"></label><label>Graphics<select id="quality"><option value="simple">Simple</option><option value="medium">Medium</option><option value="high">High</option><option value="ultra">Ultra</option></select></label><p class="small">Ultra enables HDR reflections, ambient occlusion, 4096px shadows and full-resolution car textures. Photo Mode adds genuine path tracing while parked; driving uses real-time rendering.</p></fieldset>
+    <fieldset><legend>CAR</legend><label>Speed limiter <output id="maxSpeed-value"></output><input id="maxSpeed" type="range" min="100" max="420" step="10"></label><label>Tyre grip <output id="grip-value"></output><input id="grip" type="range" min="0.5" max="2.5" step="0.1"></label><label>Downforce <output id="downforce-value"></output><input id="downforce" type="range" min="0" max="2.5" step="0.1"></label><label>Steering sensitivity <output id="steering-value"></output><input id="steering" type="range" min="0.4" max="1.6" step="0.1"></label><label class="toggle"><input id="assist" type="checkbox">Stability assistance</label></fieldset>
+    <fieldset><legend>CONDITIONS</legend><label>Weather<select id="weather"><option value="clear">Clear</option><option value="rain">Rain</option><option value="snow">Snow</option><option value="fog">Fog</option></select></label><label>Time of day<select id="time"><option value="day">Day</option><option value="sunset">Sunset</option><option value="night">Night</option></select></label><p class="small">Rain and snow reduce available grip. These settings are saved on this device.</p></fieldset>
+    <fieldset><legend>CONTROLS</legend><label class="toggle"><input id="sound" type="checkbox">Engine sound</label><label class="toggle"><input id="showFPS" type="checkbox">Show frame rate</label><button id="photo">Ray-traced Photo Mode (park first)</button><button id="fullscreen">Toggle fullscreen</button><button id="reset-start">Return to starting straight</button><p class="small">W / ↑ accelerate · S / ↓ brake<br>A D / ← → steer · Space brake<br>Hold brake while stopped to reverse.<br>R respawn · C camera · Esc settings</p></fieldset>
+  </div>
+  <footer><a href="./CREDITS.md" target="_blank" rel="noopener">Credits and build notes</a><button id="resume" class="primary">Resume driving</button></footer>
+</dialog>
+<script>
+window.previewFail = function(error) {
+  document.getElementById('loading').hidden = false;
+  document.getElementById('load-line').hidden = true;
+  document.getElementById('start').hidden = true;
+  document.getElementById('retry').hidden = false;
+  document.getElementById('load-message').textContent = 'Could not start the game: ' + (error && error.message || String(error)) + '. Check your internet connection and reload.';
+};
+import('./game.js?v=release-1').catch(window.previewFail);
+</script>
+<noscript>This game needs JavaScript enabled.</noscript>
+</body>
+</html>

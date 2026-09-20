@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>APEX — circuit pipeline check</title>
+<style>
+  body { margin:0; background:#05070b; color:#eef2f8;
+         font:13px ui-monospace,"SF Mono",Menlo,monospace; }
+  #log { position:fixed; top:0; left:0; padding:12px 16px; line-height:1.7;
+         background:rgba(5,7,11,.82); white-space:pre; z-index:2; }
+  canvas { display:block; }
+  .ok { color:#22d07a; } .bad { color:#ff2d55; }
+</style>
+<script type="importmap">{"imports":{
+  "three": "../Codex/vendor/three/build/three.module.js",
+  "three/addons/": "../Codex/vendor/three/examples/jsm/"
+}}</script>
+</head>
+<body>
+<div id="log">booting…</div>
+<script type="module">
+// A standalone check that the circuit pipeline works in a real browser, not
+// just under Node: fetch + DecompressionStream + the whole weld/stitch/solve
+// chain, then draw the result so it can be eyeballed.
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { buildRacingSurface } from './circuit/roadmesh.js';
+import { Circuit } from './circuit/racingline.js';
+
+const log = document.getElementById('log');
+const lines = [];
+const say = (text, cls = '') => {
+  lines.push(cls ? `<span class="${cls}">${text}</span>` : text);
+  log.innerHTML = lines.join('\n');
+};
+
+try {
+  const t0 = performance.now();
+  const surface = await buildRacingSurface('../Codex/assets/highway-road.b64');
+  const tSurface = performance.now() - t0;
+  const t1 = performance.now();
+  const circuit = new Circuit(surface);
+  const tCircuit = performance.now() - t1;
+
+  const widths = circuit.centreline.map(s => s.width).sort((a, b) => a - b);
+  const offTrack = circuit.racingLine.filter(p => circuit.heightAt(p.x, p.z, p.y) === null).length;
+  const speeds = circuit.racingLine.map(p => p.targetSpeed);
+
+  say(`surface built    ${tSurface.toFixed(0)} ms`);
+  say(`circuit solved   ${tCircuit.toFixed(0)} ms`);
+  say(`triangles        ${surface.stats.triangles}  (from ${surface.stats.sourceTriangles})`);
+  say(`median pairs     ${surface.stats.stitchedPairs}`);
+  say(`lap length       ${(circuit.lapLength / 1000).toFixed(3)} km`);
+  say(`racing line      ${(circuit.racingLineLength / 1000).toFixed(3)} km`);
+  say(`corridor width   ${widths[0].toFixed(1)} / ${widths[widths.length >> 1].toFixed(1)} / ${widths.at(-1).toFixed(1)} m  (min/med/max)`);
+  say(`target speed     ${(Math.min(...speeds) * 3.6).toFixed(0)} – ${(Math.max(...speeds) * 3.6).toFixed(0)} km/h`);
+  say(`line off-surface ${offTrack} / ${circuit.racingLine.length}`, offTrack ? 'bad' : 'ok');
+
+  const qs = performance.now();
+  for (let i = 0; i < 20000; i++) {
+    const p = circuit.racingLine[i % circuit.racingLine.length];
+    circuit.surfaceAt(p.x, p.z, p.y);
+  }
+  say(`surfaceAt        ${((performance.now() - qs) * 1000 / 20000).toFixed(2)} µs/query`);
+
+  // ---- draw it ----
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.append(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x05070b);
+  const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 1, 8000);
+  camera.position.set(120, 900, 900);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(90, 0, -80);
+  controls.enableDamping = true;
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(surface.positions, 3));
+  geometry.setIndex(new THREE.BufferAttribute(surface.indices, 1));
+  geometry.computeVertexNormals();
+  scene.add(new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0x1c2430 })));
+  scene.add(new THREE.LineSegments(new THREE.WireframeGeometry(geometry),
+    new THREE.LineBasicMaterial({ color: 0x33414f })));
+
+  const strip = (points, colour, lift) => {
+    const g = new THREE.BufferGeometry().setFromPoints(
+      points.map(p => new THREE.Vector3(p.x, p.y + lift, p.z)));
+    scene.add(new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: colour })));
+  };
+  strip(circuit.centreline, 0x38d6ff, 0.6);
+  strip(circuit.racingLine, 0xff2d55, 0.9);
+
+  // Colour the racing line by target speed so braking zones are visible.
+  const colours = [];
+  const positions = [];
+  for (const p of circuit.racingLine) {
+    positions.push(p.x, p.y + 1.4, p.z);
+    const t = Math.min(1, Math.max(0, (p.targetSpeed - 20) / 75));
+    colours.push(1 - t, t, 0.25);
+  }
+  const speedGeo = new THREE.BufferGeometry();
+  speedGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  speedGeo.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+  scene.add(new THREE.Points(speedGeo,
+    new THREE.PointsMaterial({ size: 4, vertexColors: true })));
+
+  say('', '');
+  say('cyan = centreline · red = racing line', '');
+  say('dots = target speed (green fast, red slow)', '');
+  say('RENDERED OK — drag to orbit', 'ok');
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+  renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+  window.__circuitReady = true;
+} catch (error) {
+  say(`FAILED: ${error.message}`, 'bad');
+  say(error.stack ?? '', 'bad');
+  window.__circuitError = String(error);
+}
+</script>
+</body>
+</html>

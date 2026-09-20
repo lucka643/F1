@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#07090e">
+<title>APEX · RB19 Circuit Racing</title>
+<meta name="description" content="A browser F1 racing game on the Highway Battle circuit, with a temporal super-resolution renderer.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2307090e'/%3E%3Cpath d='M14 44c6-22 16-26 36-26L44 30H30l-3 6h13l-8 8z' fill='%23ff2d55'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./style.css">
+<script type="importmap">{"imports":{
+  "three": "../Codex/vendor/three/build/three.module.js",
+  "three/addons/": "../Codex/vendor/three/examples/jsm/",
+  "three/examples/jsm/": "../Codex/vendor/three/examples/jsm/",
+  "rapier": "../Codex/vendor/rapier/rapier.es.js",
+  "three-mesh-bvh": "../Codex/vendor/three-mesh-bvh/build/index.module.js",
+  "three-gpu-pathtracer": "../Codex/vendor/three-gpu-pathtracer/build/index.module.js"
+}}</script>
+</head>
+<body>
+<canvas id="viewport" aria-label="3D racing game"></canvas>
+
+<!-- ─────────────────────────────── BOOT ─────────────────────────────── -->
+<section id="boot" class="screen">
+  <div class="boot-inner">
+    <div class="wordmark"><span class="mark">APEX</span><em>RB19 · Highway Battle Circuit</em></div>
+    <div class="boot-progress"><i id="boot-bar"></i></div>
+    <p id="boot-status" role="status" aria-live="polite">Starting the renderer…</p>
+    <p id="boot-detail" class="muted"></p>
+    <button id="boot-retry" class="btn ghost" hidden onclick="location.reload()">Reload</button>
+    <p id="boot-version" class="muted"></p>
+  </div>
+</section>
+
+<!-- ─────────────────────────────── MENU ─────────────────────────────── -->
+<section id="menu" class="screen" hidden>
+  <div class="menu-grid">
+    <header class="menu-head">
+      <div class="wordmark small"><span class="mark">APEX</span></div>
+      <div class="circuit-card">
+        <canvas id="menu-map" width="320" height="320" aria-label="Circuit map"></canvas>
+        <dl>
+          <div><dt>Circuit</dt><dd>Highway Battle</dd></div>
+          <div><dt>Length</dt><dd id="menu-length">—</dd></div>
+          <div><dt>Corners</dt><dd id="menu-corners">—</dd></div>
+          <div><dt>Your best</dt><dd id="menu-best">—</dd></div>
+        </dl>
+      </div>
+    </header>
+
+    <nav class="modes" aria-label="Game modes">
+      <button class="mode" data-mode="practice">
+        <b>Free Practice</b><span>Empty circuit. Learn the lap, tune the car.</span>
+      </button>
+      <button class="mode" data-mode="timetrial">
+        <b>Time Trial</b><span>Hunt a lap time against your own ghost.</span>
+      </button>
+      <button class="mode selected" data-mode="race">
+        <b>Quick Race</b><span>Grid start against AI. Choose length and difficulty.</span>
+      </button>
+    </nav>
+
+    <div class="mode-options" id="race-options">
+      <label>Opponents <output id="opponents-value"></output>
+        <input id="opponents" type="range" min="0" max="15" step="1" value="9"></label>
+      <label>Race length <output id="laps-value"></output>
+        <input id="laps" type="range" min="1" max="20" step="1" value="5"></label>
+      <label>AI skill <output id="skill-value"></output>
+        <input id="skill" type="range" min="0" max="100" step="5" value="70"></label>
+      <label>Assists
+        <select id="assists">
+          <option value="ARCADE">Arcade — forgiving, great on keyboard</option>
+          <option value="SPORT" selected>Sport — some help, still demanding</option>
+          <option value="PRO">Pro — no aids, full simulation</option>
+        </select></label>
+    </div>
+
+    <footer class="menu-foot">
+      <button id="open-settings" class="btn ghost">Settings</button>
+      <div class="preset-quick">
+        <span>Graphics</span>
+        <select id="preset-quick"></select>
+      </div>
+      <button id="start-session" class="btn primary">Go racing</button>
+      <span id="menu-version" class="muted"></span>
+    </footer>
+  </div>
+</section>
+
+<!-- ─────────────────────────────── HUD ─────────────────────────────── -->
+<div id="hud" hidden>
+  <div class="hud-top">
+    <div class="timing-block">
+      <div class="lap-counter"><span id="lap-now">1</span><em>/</em><span id="lap-total">5</span></div>
+      <div class="lap-times">
+        <div class="row"><span>LAP</span><b id="time-current">0:00.000</b></div>
+        <div class="row small"><span>BEST</span><b id="time-best">—</b></div>
+      </div>
+      <div class="sectors">
+        <i data-sector="0"></i><i data-sector="1"></i><i data-sector="2"></i>
+      </div>
+    </div>
+    <div id="delta-bar" class="delta" hidden><span id="delta-value">—</span></div>
+    <div class="position-block" id="position-block" hidden>
+      <div class="pos"><span id="pos-now">1</span><em>/</em><span id="pos-total">10</span></div>
+      <div class="gaps"><div id="gap-ahead">—</div><div id="gap-behind">—</div></div>
+    </div>
+  </div>
+
+  <div class="hud-left">
+    <canvas id="minimap" width="220" height="220" aria-label="Track map"></canvas>
+  </div>
+
+  <div class="hud-right">
+    <div id="flags" class="flags"></div>
+    <div id="notice" role="status"></div>
+  </div>
+
+  <div class="hud-bottom">
+    <div class="shift-lights" id="shift-lights"></div>
+    <div class="cluster">
+      <div class="inputs">
+        <div class="bar throttle"><i id="bar-throttle"></i></div>
+        <div class="bar brake"><i id="bar-brake"></i></div>
+      </div>
+      <div class="readout">
+        <strong id="speed">0</strong><span class="unit">KM/H</span>
+      </div>
+      <div class="gear-block">
+        <b id="gear">N</b>
+        <div class="rpm"><i id="rpm"></i></div>
+      </div>
+      <div class="badges">
+        <span id="drs" class="badge">DRS</span>
+        <span id="ers" class="badge">ERS</span>
+        <span id="tc" class="badge">TC</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="touch-controls" id="touch-controls" hidden>
+    <button class="pad left" data-control="left" aria-label="Steer left"></button>
+    <button class="pad right" data-control="right" aria-label="Steer right"></button>
+    <button class="pad brake" data-control="brake" aria-label="Brake">BRAKE</button>
+    <button class="pad throttle" data-control="throttle" aria-label="Accelerate">GO</button>
+  </div>
+
+  <button id="hud-menu" class="corner" aria-label="Pause" title="Pause (Esc)">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  <div id="fps" hidden></div>
+  <div id="version" aria-label="Build version"></div>
+</div>
+
+<!-- ───────────────────────────── SETTINGS ───────────────────────────── -->
+<dialog id="settings">
+  <header>
+    <h2>Settings</h2>
+    <button id="close-settings" class="close" aria-label="Close">×</button>
+  </header>
+  <nav class="tabs" role="tablist">
+    <button role="tab" class="selected" data-tab="graphics">Graphics</button>
+    <button role="tab" data-tab="driving">Driving</button>
+    <button role="tab" data-tab="controls">Controls</button>
+    <button role="tab" data-tab="audio">Audio</button>
+  </nav>
+
+  <section class="tab-panel" data-panel="graphics">
+    <div class="preset-picker" id="preset-picker"></div>
+    <p class="honesty" id="preset-honesty"></p>
+    <div class="grid-2">
+      <label>Resolution scale <output id="renderScale-value"></output>
+        <input id="renderScale" type="range" min="0.5" max="1" step="0.05"></label>
+      <label>Field of view <output id="fov-value"></output>
+        <input id="fov" type="range" min="50" max="105" step="1"></label>
+      <label class="toggle"><input id="adaptiveRes" type="checkbox"> Adaptive resolution</label>
+      <label class="toggle"><input id="showFPS" type="checkbox"> Show performance overlay</label>
+      <label>Time of day
+        <select id="timeOfDay">
+          <option value="noon">Noon</option>
+          <option value="afternoon" selected>Afternoon</option>
+          <option value="sunset">Sunset</option>
+          <option value="night">Night</option>
+        </select></label>
+      <label>Weather
+        <select id="weather">
+          <option value="clear" selected>Clear</option>
+          <option value="cloudy">Cloudy</option>
+          <option value="damp">Damp</option>
+          <option value="wet">Wet</option>
+        </select></label>
+    </div>
+    <button id="photo-mode" class="btn ghost">Photo Mode — ray-traced (park first)</button>
+  </section>
+
+  <section class="tab-panel" data-panel="driving" hidden>
+    <div class="grid-2">
+      <label>Assist preset
+        <select id="assistPreset">
+          <option value="ARCADE">Arcade</option>
+          <option value="SPORT" selected>Sport</option>
+          <option value="PRO">Pro</option>
+        </select></label>
+      <label>Traction control
+        <select id="tractionControl">
+          <option value="0">Off</option><option value="1">Medium</option><option value="2" selected>Full</option>
+        </select></label>
+      <label class="toggle"><input id="abs" type="checkbox" checked> Anti-lock brakes</label>
+      <label class="toggle"><input id="stability" type="checkbox" checked> Stability control</label>
+      <label class="toggle"><input id="autoGears" type="checkbox" checked> Automatic gears</label>
+      <label class="toggle"><input id="racingLine" type="checkbox"> Racing line guide</label>
+      <label>Steering sensitivity <output id="steeringSensitivity-value"></output>
+        <input id="steeringSensitivity" type="range" min="0.4" max="1.6" step="0.05"></label>
+      <label>Front wing <output id="frontWing-value"></output>
+        <input id="frontWing" type="range" min="1" max="11" step="1"></label>
+      <label>Rear wing <output id="rearWing-value"></output>
+        <input id="rearWing" type="range" min="1" max="11" step="1"></label>
+      <label>Brake bias <output id="brakeBias-value"></output>
+        <input id="brakeBias" type="range" min="50" max="70" step="0.5"></label>
+    </div>
+  </section>
+
+  <section class="tab-panel" data-panel="controls" hidden>
+    <div class="keymap">
+      <div><kbd>W</kbd><kbd>↑</kbd><span>Throttle</span></div>
+      <div><kbd>S</kbd><kbd>↓</kbd><span>Brake / reverse</span></div>
+      <div><kbd>A</kbd><kbd>D</kbd><span>Steer</span></div>
+      <div><kbd>Shift</kbd><kbd>Ctrl</kbd><span>Shift up / down</span></div>
+      <div><kbd>Space</kbd><span>Handbrake</span></div>
+      <div><kbd>E</kbd><span>DRS</span></div>
+      <div><kbd>C</kbd><span>Change camera</span></div>
+      <div><kbd>R</kbd><span>Respawn</span></div>
+      <div><kbd>Esc</kbd><span>Pause</span></div>
+    </div>
+    <p class="muted">A gamepad is detected automatically; analogue triggers and stick are used when present.</p>
+    <div class="grid-2">
+      <label>Camera
+        <select id="camera">
+          <option value="chase">Chase</option>
+          <option value="close">Close chase</option>
+          <option value="tv">TV pod</option>
+          <option value="cockpit">Cockpit</option>
+          <option value="halo">Halo / driver eye</option>
+          <option value="nose">Nose</option>
+        </select></label>
+      <label>Chase distance <output id="chaseDistance-value"></output>
+        <input id="chaseDistance" type="range" min="4" max="14" step="0.5"></label>
+      <label class="toggle"><input id="cameraShake" type="checkbox" checked> Camera shake</label>
+      <label class="toggle"><input id="invertLook" type="checkbox"> Invert look</label>
+    </div>
+  </section>
+
+  <section class="tab-panel" data-panel="audio" hidden>
+    <div class="grid-2">
+      <label class="toggle"><input id="sound" type="checkbox" checked> Sound</label>
+      <label>Master volume <output id="volume-value"></output>
+        <input id="volume" type="range" min="0" max="100" step="5"></label>
+      <label>Engine <output id="engineVolume-value"></output>
+        <input id="engineVolume" type="range" min="0" max="100" step="5"></label>
+      <label>Tyres &amp; wind <output id="effectsVolume-value"></output>
+        <input id="effectsVolume" type="range" min="0" max="100" step="5"></label>
+    </div>
+  </section>
+
+  <footer>
+    <button id="quit-session" class="btn ghost" hidden>Back to menu</button>
+    <button id="resume" class="btn primary">Resume</button>
+  </footer>
+</dialog>
+
+<!-- ───────────────────────────── RESULTS ───────────────────────────── -->
+<section id="results" class="screen" hidden>
+  <div class="results-inner">
+    <h2 id="results-title">Race result</h2>
+    <table id="results-table"><tbody></tbody></table>
+    <div class="results-actions">
+      <button id="results-again" class="btn primary">Race again</button>
+      <button id="results-menu" class="btn ghost">Main menu</button>
+    </div>
+  </div>
+</section>
+
+<div id="photo-bar" hidden>
+  <span id="photo-state">Preparing ray tracing…</span>
+  <button id="photo-save" class="btn ghost">Save photo</button>
+  <button id="photo-exit" class="btn ghost">Back to driving</button>
+</div>
+
+<script>
+window.apexFail = function (error) {
+  const boot = document.getElementById('boot');
+  boot.hidden = false;
+  document.getElementById('menu').hidden = true;
+  document.getElementById('hud').hidden = true;
+  document.getElementById('boot-bar').parentElement.hidden = true;
+  document.getElementById('boot-retry').hidden = false;
+  document.getElementById('boot-status').textContent = 'Could not start.';
+  const stack = (error && error.stack) ? String(error.stack).split('\n').slice(0, 6).join('\n') : '';
+  document.getElementById('boot-detail').textContent =
+    ((error && error.message) || String(error)) + (stack ? '\n\n' + stack : '');
+  document.getElementById('boot-detail').style.whiteSpace = 'pre-wrap';
+  document.getElementById('boot-detail').style.textAlign = 'left';
+  document.getElementById('boot-detail').style.maxWidth = '46rem';
+  console.error(error);
+};
+import('./main.js').catch(window.apexFail);
+</script>
+<noscript>This game needs JavaScript.</noscript>
+</body>
+</html>
