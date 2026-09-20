@@ -30,6 +30,7 @@ export const DEFAULTS = {
   autoGears: true,
   racingLine: false,
   steeringSensitivity: 1,
+  gripLevel: 1,
   frontWing: 6,
   rearWing: 6,
   brakeBias: 58,
@@ -38,6 +39,7 @@ export const DEFAULTS = {
   chaseDistance: 7.5,
   cameraShake: true,
   invertLook: false,
+  onScreenControls: 'auto',
   // audio
   sound: true,
   volume: 70,
@@ -55,6 +57,8 @@ const SCHEMA = {
   assistPreset: { enum: ['ARCADE', 'SPORT', 'PRO'] },
   tractionControl: { enum: [0, 1, 2], numeric: true },
   steeringSensitivity: { range: [0.4, 1.6], unit: '×' },
+  gripLevel: { range: [0.5, 1.8], unit: '×' },
+  onScreenControls: { enum: ['auto', 'always', 'never'] },
   frontWing: { range: [1, 11] },
   rearWing: { range: [1, 11] },
   brakeBias: { range: [50, 70], unit: '%' },
@@ -207,9 +211,9 @@ export function createSettingsUI(settings, onChange) {
   // is only a shortcut for them — but touching a toggle afterwards leaves the
   // preset selector alone rather than fighting the user.
   const LADDER = {
-    ARCADE: { tractionControl: 2, abs: true, stability: true, autoGears: true },
-    SPORT:  { tractionControl: 1, abs: true, stability: false, autoGears: true },
-    PRO:    { tractionControl: 0, abs: false, stability: false, autoGears: false },
+    ARCADE: { tractionControl: 2, abs: true, stability: true, autoGears: true, gripLevel: 1.3 },
+    SPORT:  { tractionControl: 1, abs: true, stability: false, autoGears: true, gripLevel: 1.0 },
+    PRO:    { tractionControl: 0, abs: false, stability: false, autoGears: false, gripLevel: 0.85 },
   };
   $('assistPreset').addEventListener('change', event => {
     const ladder = LADDER[event.target.value];

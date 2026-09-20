@@ -411,26 +411,45 @@ kbd {
   white-space: pre; line-height: 1.5;
 }
 
-/* ─────────────────────────── touch controls ─────────────────────────── */
+/* ───────────────────── on-screen driving controls ───────────────────── */
+/* Laid out like a real wheel: pedals under the left thumb, steering under the
+   right. Works with mouse, touch and pen — they are all pointer events. */
 .touch-controls { position: absolute; inset: 0; }
+.touch-controls > div { position: absolute; bottom: calc(var(--safe-b) + 1.1rem); display: flex; gap: 0.7rem; }
+.pedals   { left: calc(var(--safe-l) + 1.1rem); }
+.steering { right: calc(var(--safe-r) + 1.1rem); }
+
 .pad {
-  position: absolute; bottom: calc(var(--safe-b) + 1.2rem);
-  appearance: none; border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.06); backdrop-filter: blur(10px);
-  color: var(--text); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em;
-  border-radius: 50%; width: 5rem; height: 5rem; cursor: pointer;
+  appearance: none; cursor: pointer; pointer-events: auto;
+  display: grid; place-items: center; gap: 0.25rem;
+  width: 5.4rem; height: 5.4rem; padding: 0;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: var(--panel); backdrop-filter: blur(12px);
+  color: var(--text);
+  transition: background 0.1s, transform 0.06s, border-color 0.1s;
+  -webkit-tap-highlight-color: transparent;
 }
-.pad.left  { left: calc(var(--safe-l) + 1.2rem); }
-.pad.right { left: calc(var(--safe-l) + 7rem); }
-.pad.brake { right: calc(var(--safe-r) + 7rem); }
-.pad.throttle { right: calc(var(--safe-r) + 1.2rem); background: rgba(34, 208, 122, 0.18); }
-.pad.pressed { background: rgba(255, 255, 255, 0.22); transform: scale(0.96); }
-.pad.left::after, .pad.right::after {
-  content: ''; position: absolute; inset: 0; margin: auto;
-  width: 0; height: 0; border-block: 0.7rem solid transparent;
+.pad svg { width: 1.9rem; height: 1.9rem; fill: currentColor; }
+.pad span {
+  font-size: 0.5rem; font-weight: 700; letter-spacing: 0.12em;
+  color: var(--muted); line-height: 1;
 }
-.pad.left::after  { border-right: 1rem solid currentColor; transform: translateX(-0.2rem); }
-.pad.right::after { border-left: 1rem solid currentColor; transform: translateX(0.2rem); }
+.pad.throttle { color: var(--green); border-color: rgba(34, 208, 122, 0.3); }
+.pad.brake    { color: var(--accent); border-color: rgba(255, 45, 85, 0.3); }
+.pad:hover { background: rgba(255, 255, 255, 0.09); }
+.pad.pressed {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(0.95);
+}
+.pad.throttle.pressed { background: rgba(34, 208, 122, 0.3); }
+.pad.brake.pressed    { background: rgba(255, 45, 85, 0.3); }
+
+@media (max-width: 720px), (max-height: 470px) {
+  .pad { width: 4.4rem; height: 4.4rem; }
+  .pad svg { width: 1.5rem; height: 1.5rem; }
+  .pad span { display: none; }
+}
 
 /* ─────────────────────────────── results ─────────────────────────────── */
 .results-inner {

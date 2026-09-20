@@ -192,6 +192,7 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
   let gearChangeTimer = 0;
   let engineRpm = ENGINE.idleRpm;
   let invertedTimer = 0;
+  let gripLevel = 1;
 
   function shapeInput(input, dt, settings) {
     const speed = Math.abs(state.speed);
@@ -291,6 +292,9 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
 
   function step(dt, input, settings = {}) {
     const assists = resolveAssists(settings);
+    // How hard the tyres bite, as a player-facing dial. 1.0 is the tuned
+    // baseline; below that the car slides earlier, above it the car is planted.
+    gripLevel = Number.isFinite(settings.gripLevel) ? clamp(settings.gripLevel, 0.5, 1.8) : 1;
     shapeInput(input, dt, settings);
     readBody();
 
@@ -467,7 +471,7 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
 
       /* --- forces --- */
       const loadFactor = 1 - TYRE.loadSensitivity * Math.max(0, load - TYRE.referenceLoad);
-      const gripLimit = load * gripScale * Math.max(0.62, loadFactor);
+      const gripLimit = load * gripScale * Math.max(0.62, loadFactor) * gripLevel;
 
       let longitudinal = magicFormula(wheel.slipRatio, TYRE.longitudinal) * gripLimit;
       let lateral = magicFormula(wheel.slipAngle, TYRE.lateral) * gripLimit;

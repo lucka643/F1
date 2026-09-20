@@ -223,6 +223,8 @@ function onSettingChange(key, value) {
     case 'chaseDistance': game.cameraRig.setChaseDistance(value); break;
     case 'cameraShake': game.cameraRig.setShake(value); break;
     case 'invertLook': game.cameraRig.setInvertLook(value); break;
+    case 'onScreenControls': game.hud.setTouchVisible(shouldShowOnScreenControls()); break;
+    case 'assistPreset': case 'gripLevel': break;   // read live by the vehicle each step
     case 'timeOfDay': game.pipeline.setTimeOfDay(value); break;
     case 'weather':
       game.pipeline.setWetness({ clear: 0, cloudy: 0, damp: 0.45, wet: 1 }[value] ?? 0);
@@ -247,6 +249,13 @@ function applyAllSettings() {
   game.cameraRig.setShake(settings.cameraShake);
   game.audio.setEnabled(settings.sound);
   game.audio.setVolume(settings.volume / 100);
+}
+
+/** Auto shows the pads only on touch devices; the other modes are explicit. */
+function shouldShowOnScreenControls() {
+  if (settings.onScreenControls === 'always') return true;
+  if (settings.onScreenControls === 'never') return false;
+  return matchMedia('(pointer: coarse)').matches;
 }
 
 function resize() {
@@ -322,7 +331,7 @@ function startSession() {
 
   $('menu').hidden = true;
   game.hud.show();
-  game.hud.setTouchVisible(matchMedia('(pointer: coarse)').matches);
+  game.hud.setTouchVisible(shouldShowOnScreenControls());
   game.phase = 'session';
   game.paused = false;
   game.input.setEnabled(true);
