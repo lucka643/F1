@@ -31,8 +31,23 @@ export const TYRE_RADIUS = 0.375;
 const ASSETS = new URL('../../Codex/assets/', import.meta.url);
 const DRACO_PATH = new URL('../../Codex/vendor/three/examples/jsm/libs/draco/gltf/', import.meta.url).href;
 
-/** Half-extents of the box used to claim triangles for each wheel. */
-const WHEEL_BOX = { x: 0.275, y: 0.425, z: 0.44 };
+/**
+ * Half-extents of the box used to claim geometry for each wheel corner.
+ * Wider than the tyre so it also captures the aero furniture around it —
+ * wheel covers, brake ducts and the over-tyre winglets.
+ */
+const WHEEL_BOX = { x: 0.40, y: 0.66, z: 0.62 };
+
+/**
+ * Radius about the wheel's spin axis inside which geometry counts as rotating.
+ *
+ * The tyre and rim are a solid of revolution about that axis, so everything
+ * belonging to them lies within roughly the tyre radius of it. The covers,
+ * ducts and winglets sit outside that envelope. Splitting on this distance
+ * separates what spins from what does not, without the model needing to have
+ * been authored with named parts.
+ */
+const SPIN_RADIUS = TYRE_RADIUS + 0.045;
 
 
 /**
@@ -294,11 +309,12 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
 
   const wheels = WHEEL_CENTRES.map((centre, i) => {
     const steer = new THREE.Group();          // yaw: front wheels only
-    const spin = new THREE.Group();           // pitch: rolling
+    const spin = new THREE.Group();           // pitch: rolling tyre and rim
+    const fairing = new THREE.Group();        // steers with the wheel, never spins
     steer.position.copy(centre);
-    steer.add(spin);
+    steer.add(spin, fairing);
     chassis.add(steer);
-    return { steer, spin, index: i, centre };
+    return { steer, spin, fairing, index: i, centre };
   });
 
   let sharedMaterial = null;
@@ -316,8 +332,9 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
     const index = geometry.index?.array
       ?? Uint32Array.from({ length: position.count }, (_, i) => i);
 
-    // Bucket 0 is the chassis; buckets 1..4 are the wheels.
-    const buckets = [[], [], [], [], []];
+    // Bucket 0 is the chassis, 1..4 the rotating wheels, 5..8 the aero
+    // furniture at each corner: it steers with the wheel but never spins.
+    const buckets = [[], [], [], [], [], [], [], [], []];
     for (let t = 0; t + 2 < index.length; t += 3) {
       const tri = [index[t], index[t + 1], index[t + 2]];
       let bucket = 0;
@@ -327,7 +344,19 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
           Math.abs(position.getX(id) - c.x) < WHEEL_BOX.x &&
           Math.abs(position.getY(id) - c.y) < WHEEL_BOX.y &&
           Math.abs(position.getZ(id) - c.z) < WHEEL_BOX.z);
-        if (inside) { bucket = w + 1; break; }
+        if (!inside) continue;
+        // Distance from the spin axis, which runs along X through the hub.
+        // Averaged over the triangle so a face straddling the boundary is
+        // assigned as a whole rather than torn between two groups.
+        let radial = 0;
+        for (const id of tri) {
+          const dy = position.getY(id) - c.y;
+          const dz = position.getZ(id) - c.z;
+          radial += Math.hypot(dy, dz);
+        }
+        radial /= 3;
+        bucket = radial <= SPIN_RADIUS ? w + 1 : w + 5;
+        break;
       }
       buckets[bucket].push(...tri);
     }
@@ -338,16 +367,20 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
     buckets.forEach((triangles, bucket) => {
       if (!triangles.length) return;
       const part = extractTriangles(geometry, triangles);
-      if (bucket > 0) {
-        // Re-origin each wheel's geometry on its own hub so it can spin.
-        const c = WHEEL_CENTRES[bucket - 1];
+      const wheelIndex = bucket === 0 ? -1 : (bucket <= 4 ? bucket - 1 : bucket - 5);
+      if (wheelIndex >= 0) {
+        // Re-origin on the hub so the group rotates about the axle.
+        const c = WHEEL_CENTRES[wheelIndex];
         part.translate(-c.x, -c.y, -c.z);
       }
       const mesh = new THREE.Mesh(part, sharedMaterial);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;   // the car is always relevant
-      (bucket > 0 ? wheels[bucket - 1].spin : chassis).add(mesh);
+      const parent = wheelIndex < 0 ? chassis
+        : bucket <= 4 ? wheels[wheelIndex].spin     // tyre and rim: spins
+        : wheels[wheelIndex].fairing;               // covers/winglets: steers only
+      parent.add(mesh);
     });
 
     geometry.dispose();
@@ -360,6 +393,8 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
   const measured = new THREE.Box3().setFromObject(root);
   const measuredSize = measured.getSize(new THREE.Vector3());
   const emptyWheels = wheels.filter(w => w.spin.children.length === 0).length;
+  console.info('RB19 corners (spin/fairing): ' +
+    wheels.map(w => `${w.spin.children.length}/${w.fairing.children.length}`).join('  '));
   if (Math.abs(measuredSize.z - CAR_LENGTH) > 0.6 || emptyWheels > 0) {
     console.warn(`RB19 assembly looks wrong: length ${measuredSize.z.toFixed(2)} m ` +
       `(expected ${CAR_LENGTH}), ${emptyWheels} wheel group(s) empty.`);
