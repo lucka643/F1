@@ -47,7 +47,20 @@ const WHEEL_BOX = { x: 0.40, y: 0.66, z: 0.62 };
  * separates what spins from what does not, without the model needing to have
  * been authored with named parts.
  */
-const SPIN_RADIUS = TYRE_RADIUS + 0.045;
+const SPIN_RADIUS = TYRE_RADIUS + 0.02;
+
+/**
+ * Half-width of the rotating assembly, per axle.
+ *
+ * A radial test alone is not enough, which is what the first attempt got wrong.
+ * Wheel covers and brake ducts lie flat against the rim face, so they are
+ * WITHIN the tyre radius and a radial test happily calls them part of the
+ * wheel. What distinguishes them is that they sit outboard of the tyre's
+ * width: measured, the rotating group spanned 0.60 m across when a tyre is
+ * only about 0.38 m wide. Real front and rear tyres differ (305 mm vs 405 mm),
+ * so the limit is per-axle.
+ */
+const SPIN_HALF_WIDTH = { front: 0.175, rear: 0.225 };
 
 
 /**
@@ -345,17 +358,19 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
           Math.abs(position.getY(id) - c.y) < WHEEL_BOX.y &&
           Math.abs(position.getZ(id) - c.z) < WHEEL_BOX.z);
         if (!inside) continue;
-        // Distance from the spin axis, which runs along X through the hub.
-        // Averaged over the triangle so a face straddling the boundary is
-        // assigned as a whole rather than torn between two groups.
-        let radial = 0;
+        // Both measured from the hub and averaged over the triangle, so a
+        // face straddling a boundary is assigned whole rather than torn.
+        let radial = 0, axial = 0;
         for (const id of tri) {
           const dy = position.getY(id) - c.y;
           const dz = position.getZ(id) - c.z;
           radial += Math.hypot(dy, dz);
+          axial += Math.abs(position.getX(id) - c.x);
         }
         radial /= 3;
-        bucket = radial <= SPIN_RADIUS ? w + 1 : w + 5;
+        axial /= 3;
+        const halfWidth = w < 2 ? SPIN_HALF_WIDTH.front : SPIN_HALF_WIDTH.rear;
+        bucket = (radial <= SPIN_RADIUS && axial <= halfWidth) ? w + 1 : w + 5;
         break;
       }
       buckets[bucket].push(...tri);
@@ -393,8 +408,19 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
   const measured = new THREE.Box3().setFromObject(root);
   const measuredSize = measured.getSize(new THREE.Vector3());
   const emptyWheels = wheels.filter(w => w.spin.children.length === 0).length;
-  console.info('RB19 corners (spin/fairing): ' +
-    wheels.map(w => `${w.spin.children.length}/${w.fairing.children.length}`).join('  '));
+  // If the split is right the rotating group is about a tyre wide. Report it,
+  // because a silently over-wide group means aero is being spun again.
+  for (const wheel of wheels) {
+    const extent = new THREE.Box3();
+    wheel.spin.children.forEach(o => extent.expandByObject(o));
+    if (extent.isEmpty()) continue;
+    const size = extent.getSize(new THREE.Vector3());
+    console.info(`Wheel ${wheel.index}: rotating group ${size.x.toFixed(2)} m wide, ` +
+      `${wheel.fairing.children.length} fairing mesh(es)`);
+    if (size.x > 0.52) {
+      console.warn(`Wheel ${wheel.index} rotating group is too wide — aero may still be spinning.`);
+    }
+  }
   if (Math.abs(measuredSize.z - CAR_LENGTH) > 0.6 || emptyWheels > 0) {
     console.warn(`RB19 assembly looks wrong: length ${measuredSize.z.toFixed(2)} m ` +
       `(expected ${CAR_LENGTH}), ${emptyWheels} wheel group(s) empty.`);

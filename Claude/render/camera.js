@@ -21,9 +21,17 @@ export const RIGS = {
   chase:   { offset: new THREE.Vector3(0, 2.05, -7.5), look: new THREE.Vector3(0, 0.55, 5.5), rigid: false, fovScale: 1.00 },
   close:   { offset: new THREE.Vector3(0, 1.55, -5.0), look: new THREE.Vector3(0, 0.45, 4.5), rigid: false, fovScale: 1.02 },
   tv:      { offset: new THREE.Vector3(0, 1.28, -0.85), look: new THREE.Vector3(0, 0.62, 16.0), rigid: true,  fovScale: 0.98 },
-  // Driver's eye, set back far enough that the halo hoop reads in frame.
-  cockpit: { offset: new THREE.Vector3(0, 0.74, -0.46), look: new THREE.Vector3(0, 0.60, 18.0), rigid: true,  fovScale: 1.10 },
-  halo:    { offset: new THREE.Vector3(0, 0.80, -0.55), look: new THREE.Vector3(0, 0.66, 18.0), rigid: true,  fovScale: 1.12 },
+  // Cockpit and halo are placed from the model's own geometry, not guessed.
+  // Scanning max height near the centreline gives the car's profile: the roll
+  // hoop peaks at z=-0.1/y=0.60, the cockpit opening is the dip at z=0.1..0.3
+  // where height falls to 0.16, and the halo arcs forward over z=0.4..0.8.
+  //
+  // So the driver's eye belongs just above that dip, BEHIND the halo's forward
+  // strut and level with the hoop — which is what puts the halo in frame.
+  // Previously both sat at y=0.74..0.80, well above the hoop, looking straight
+  // over the top of it; that is why the halo view never showed a halo.
+  cockpit: { offset: new THREE.Vector3(0, 0.40, 0.06), look: new THREE.Vector3(0, 0.30, 20.0), rigid: true, fovScale: 1.08 },
+  halo:    { offset: new THREE.Vector3(0, 0.345, 0.02), look: new THREE.Vector3(0, 0.28, 20.0), rigid: true, fovScale: 1.15 },
   nose:    { offset: new THREE.Vector3(0, 0.30, 2.55), look: new THREE.Vector3(0, 0.22, 18.0), rigid: true,  fovScale: 1.00 },
 };
 
@@ -61,6 +69,7 @@ export function createCameraRig(camera, options = {}) {
 
   let shakeSeed = 0;
   let shakeLevel = 0;
+  let smoothedHeight = NaN;   // only the camera's height is eased; distance is rigid
   let teleport = false;      // set by snap(): this frame ignores all smoothing
 
   /* ---------------------------------------------------------- free look */
@@ -197,27 +206,29 @@ export function createCameraRig(camera, options = {}) {
 
       // Position is damped harder than the aim point, which keeps the horizon
       // steady while the car moves under it.
-      if (teleport) {
-        eye.copy(desiredEye);
-        focus.copy(desiredFocus);
-      } else {
-        const positionLambda = 9;
-        const focusLambda = 14;
-        eye.x = damp(eye.x, desiredEye.x, positionLambda, dt);
-        eye.y = damp(eye.y, desiredEye.y, positionLambda, dt);
-        eye.z = damp(eye.z, desiredEye.z, positionLambda, dt);
-        focus.x = damp(focus.x, desiredFocus.x, focusLambda, dt);
-        focus.y = damp(focus.y, desiredFocus.y, focusLambda, dt);
-        focus.z = damp(focus.z, desiredFocus.z, focusLambda, dt);
-      }
+      // The camera is LOCKED to the car in translation. It used to be damped
+      // toward the target position, which looks fine standing still but has a
+      // steady-state lag proportional to speed: damping with lambda = 9 while
+      // the car does 90 m/s settles ~10 m further back than intended, so the
+      // car appeared to drift away the faster you went. Exponential smoothing
+      // simply cannot track a moving target without lag.
+      //
+      // Only `heading` is smoothed now (above). That keeps the reason the
+      // chase rig is smoothed at all — the chassis rotating within the frame
+      // during a slide — while the distance stays exactly what was asked for.
+      eye.copy(desiredEye);
 
-      // However far behind the rig has fallen, never let it exceed a sane
-      // trailing distance — a long stall must not strand the camera off-map.
-      const slack = eye.distanceTo(carPosition);
-      const maxSlack = pullback * 2.2 + 12;
-      if (slack > maxSlack) {
-        eye.copy(carPosition).addScaledVector(scratch.copy(eye).sub(carPosition).normalize(), maxSlack);
+      // Vertical is still eased, because ride height and kerb strikes are
+      // high-frequency and the horizon should not jitter with them. Height
+      // does not accumulate lag the way the follow distance did.
+      if (teleport || !Number.isFinite(smoothedHeight)) {
+        smoothedHeight = desiredEye.y;
+      } else {
+        smoothedHeight = damp(smoothedHeight, desiredEye.y, 11, dt);
       }
+      eye.y = smoothedHeight;
+
+      focus.copy(desiredFocus);
     }
 
     // Keep a static wall from ending up between the camera and the car.

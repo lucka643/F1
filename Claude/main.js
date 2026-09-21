@@ -78,7 +78,9 @@ async function boot() {
 
   const capabilities = detectCapabilities(renderer);
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(settings.fov, innerWidth / innerHeight, 0.1, 6000);
+  // Near plane is tight: in the halo view the hoop sits ~0.4 m from the eye and
+  // must not be clipped away.
+  const camera = new THREE.PerspectiveCamera(settings.fov, innerWidth / innerHeight, 0.05, 6000);
 
   progress(0.08, 'Starting the physics engine…');
   await RAPIER.init();
