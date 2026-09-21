@@ -9,20 +9,16 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2307090e'/%3E%3Cpath d='M14 44c6-22 16-26 36-26L44 30H30l-3 6h13l-8 8z' fill='%23ff2d55'/%3E%3C/svg%3E">
 <style>
   :root {
-    --bg: #05070b;
-    --panel: rgba(15,19,28,.72);
-    --line: rgba(255,255,255,.10);
-    --text: #eef2f8;
-    --muted: #8b96a8;
-    --accent: #ff2d55;
-    --cyan: #38d6ff;
+    --bg: #05070b; --panel: rgba(15,19,28,.72); --line: rgba(255,255,255,.10);
+    --text: #eef2f8; --muted: #8b96a8; --accent: #ff2d55; --cyan: #38d6ff;
     --sans: ui-sans-serif, system-ui, -apple-system, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
     --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; min-height: 100vh;
-    padding: max(env(safe-area-inset-top), 2.5rem) 1.5rem max(env(safe-area-inset-bottom), 2.5rem);
+    margin: 0; min-height: 100svh;
+    padding: max(env(safe-area-inset-top), 1.5rem) max(env(safe-area-inset-right), 1.25rem)
+             max(env(safe-area-inset-bottom), 1.5rem) max(env(safe-area-inset-left), 1.25rem);
     display: grid; place-items: center;
     font-family: var(--sans); color: var(--text);
     background:
@@ -30,101 +26,97 @@
       radial-gradient(90% 70% at 50% 110%, rgba(56,214,255,.08), transparent 60%),
       var(--bg);
   }
-  .wrap { width: min(62rem, 100%); display: grid; gap: 2.5rem; }
-  header { display: grid; gap: .8rem; text-align: center; justify-items: center; }
+  .wrap { width: min(50rem, 100%); display: grid; gap: clamp(1.75rem, 5vw, 2.75rem); }
+  header { display: grid; gap: .75rem; text-align: center; justify-items: center; }
   h1 {
-    margin: 0; font-size: clamp(2rem, 7vw, 3.4rem); font-weight: 800; letter-spacing: -.02em;
+    margin: 0; font-size: clamp(3rem, 16vw, 5.5rem); font-weight: 800;
+    letter-spacing: .06em; line-height: .9;
     background: linear-gradient(100deg, #fff 30%, var(--accent) 85%);
     -webkit-background-clip: text; background-clip: text; color: transparent;
   }
-  .sub { margin: 0; color: var(--muted); max-width: 46rem; line-height: 1.65; }
-  .cards { display: grid; gap: 1.2rem; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); }
+  .sub { margin: 0; color: var(--muted); max-width: 34rem; line-height: 1.6; font-size: .95rem; }
+  .sub em { color: var(--text); font-style: normal; }
+
+  .cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
   .card {
-    display: grid; gap: 1rem; align-content: start;
+    display: grid; gap: .6rem; align-content: start;
     border: 1px solid var(--line); border-top: 3px solid var(--edge, var(--line));
     background: var(--panel); backdrop-filter: blur(14px);
-    padding: 1.6rem; text-decoration: none; color: inherit;
-    transition: transform .16s ease, border-color .16s, background .16s;
+    padding: 1.4rem; text-decoration: none; color: inherit;
+    transition: transform .16s ease, background .16s;
   }
   .card:hover { transform: translateY(-3px); background: rgba(255,255,255,.06); }
-  .card h2 { margin: 0; font-size: 1.35rem; letter-spacing: .02em; }
+  .card.apex  { --edge: var(--accent); }
+  .card.codex { --edge: var(--cyan); }
   .tag {
-    justify-self: start; font-size: .62rem; letter-spacing: .18em; text-transform: uppercase;
-    border: 1px solid var(--line); padding: .25rem .5rem; color: var(--muted);
+    justify-self: start; font-family: var(--mono); font-size: .6rem;
+    letter-spacing: .18em; text-transform: uppercase; color: var(--muted);
+    border: 1px solid var(--line); padding: .2rem .45rem;
   }
-  .card p { margin: 0; color: var(--muted); font-size: .9rem; line-height: 1.65; }
-  ul { margin: 0; padding-left: 1.1rem; color: var(--muted); font-size: .86rem; line-height: 1.8; }
-  ul b { color: var(--text); font-weight: 600; }
+  .card h2 { margin: 0; font-size: 1.5rem; letter-spacing: .01em; }
+  .card p { margin: 0; color: var(--muted); font-size: .88rem; line-height: 1.6; }
   .go {
-    justify-self: start; margin-top: .3rem; padding: .62rem 1.2rem;
-    font-size: .76rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+    justify-self: start; margin-top: .5rem; padding: .6rem 1.4rem;
+    font-size: .72rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
     border: 1px solid var(--line); background: rgba(255,255,255,.05);
   }
-  .card.apex { --edge: var(--accent); }
   .card.apex .go { background: linear-gradient(180deg, var(--accent), #c01f3f); border-color: transparent; color: #fff; }
-  .card.codex { --edge: var(--cyan); }
-  footer { color: var(--muted); font-size: .78rem; line-height: 1.8; text-align: center; }
+
+  footer { color: var(--muted); font-size: .72rem; line-height: 1.7; text-align: center; }
+  footer p { margin: 0 0 .4rem; }
   footer a { color: var(--cyan); }
-  code { font-family: var(--mono); font-size: .92em; color: var(--text); }
+
+  /* Phone: cards stack and the wordmark stops dominating the fold. */
+  @media (max-width: 560px) {
+    .cards { grid-template-columns: 1fr; }
+    .card { padding: 1.15rem; }
+    .go { width: 100%; text-align: center; }
+  }
+  /* Phone landscape: short — tighten vertical rhythm so it fits without scrolling. */
+  @media (max-height: 500px) and (orientation: landscape) {
+    .wrap { gap: 1.1rem; }
+    h1 { font-size: 2.4rem; }
+    .sub { font-size: .82rem; }
+    .card { padding: .9rem; gap: .4rem; }
+    .card h2 { font-size: 1.15rem; }
+    .card p { font-size: .78rem; }
+    footer { font-size: .64rem; }
+  }
   @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>One circuit, two builds</h1>
-    <p class="sub">
-      Both games use the same assets: the Red Bull <strong>RB19</strong> model and the road mesh
-      from <em>NFS Undercover DS — Highway Battle</em>. They are otherwise completely separate
-      builds by two different AI systems.
-    </p>
+    <h1>F1</h1>
+    <p class="sub">Two racing games built on the same RB19 model and the same
+      <em>Highway Battle</em> road mesh — by two different AI systems.</p>
   </header>
 
   <div class="cards">
     <a class="card apex" href="./Claude/">
-      <span class="tag">Built by Claude</span>
+      <span class="tag">Claude</span>
       <h2>APEX</h2>
-      <p>
-        The same road mesh, rebuilt as a real racing circuit — the two carriageways stitched
-        together into a 3.87 km closed lap with a proper racing line, sector timing and AI
-        opponents.
-      </p>
-      <ul>
-        <li><b>Five graphics tiers</b>, topping out at APEX: temporal super-resolution, screen-space reflections, four-cascade contact shadows</li>
-        <li><b>Custom tyre model</b> — Pacejka slip curves, not a single friction number</li>
-        <li><b>Race, time trial and practice</b>, with lap and sector timing</li>
-      </ul>
-      <span class="go">Play APEX</span>
+      <p>The road mesh rebuilt as a real circuit: 3.87&nbsp;km lap, racing line,
+        lap and sector timing, AI opponents.</p>
+      <span class="go">Play</span>
     </a>
 
     <a class="card codex" href="./Codex/">
-      <span class="tag">Built by Codex / ChatGPT</span>
-      <h2>Highway Drive 1.0</h2>
-      <p>
-        The original build: free driving along the highway with weather, time-of-day and a
-        parked ray-traced photo mode. Preserved exactly as it was, untouched.
-      </p>
-      <ul>
-        <li>Four quality presets, up to Ultra</li>
-        <li>Clear / rain / snow / fog and day / sunset / night</li>
-        <li>Genuine path-traced Photo Mode while parked</li>
-      </ul>
-      <span class="go">Play Highway Drive</span>
+      <span class="tag">Codex</span>
+      <h2>Highway Drive</h2>
+      <p>Free driving along the highway, with weather, time of day and a
+        ray-traced photo mode.</p>
+      <span class="go">Play</span>
     </a>
   </div>
 
   <footer>
-    <p>
-      The RB19 model is by <a href="https://sketchfab.com/redgrund">Redgrund</a> and the road mesh by
-      <a href="https://sketchfab.com/amogusstrikesback2">amogusstrikesback2</a>, both CC&nbsp;BY&nbsp;4.0.
-      Surfaces and sky are CC0 from <a href="https://polyhaven.com/license">Poly Haven</a>.
-      Full attribution in <a href="./Codex/CREDITS.md">Codex/CREDITS.md</a> and
-      <a href="./Claude/CREDITS.md">Claude/CREDITS.md</a>.
-    </p>
-    <p>
-      Not an official Formula 1, Red Bull, Oracle or Need for Speed product.
-      Source: <a href="https://github.com/lucka643/F1">github.com/lucka643/F1</a>
-    </p>
+    <p>RB19 by <a href="https://sketchfab.com/redgrund">Redgrund</a> · road mesh by
+      <a href="https://sketchfab.com/amogusstrikesback2">amogusstrikesback2</a> · both CC&nbsp;BY&nbsp;4.0.
+      Surfaces and sky CC0 from <a href="https://polyhaven.com/license">Poly Haven</a>.</p>
+    <p>Not an official Formula 1, Red Bull, Oracle or Need for Speed product.
+      <a href="https://github.com/lucka643/F1">Source</a></p>
   </footer>
 </div>
 </body>

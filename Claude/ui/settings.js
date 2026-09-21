@@ -39,7 +39,7 @@ export const DEFAULTS = {
   chaseDistance: 7.5,
   cameraShake: true,
   invertLook: false,
-  onScreenControls: 'auto',
+  onScreenControls: 'auto',   // auto = show on touch devices
   // audio
   sound: true,
   volume: 70,
@@ -215,16 +215,22 @@ export function createSettingsUI(settings, onChange) {
     SPORT:  { tractionControl: 1, abs: true, stability: false, autoGears: true, gripLevel: 1.0 },
     PRO:    { tractionControl: 0, abs: false, stability: false, autoGears: false, gripLevel: 0.85 },
   };
-  $('assistPreset').addEventListener('change', event => {
+  $('assistPreset')?.addEventListener('change', event => {
     const ladder = LADDER[event.target.value];
     if (!ladder) return;
     for (const [key, value] of Object.entries(ladder)) {
+      // Apply to the model whether or not a control for it is on screen. Most
+      // of these no longer have their own widget — the ladder IS the interface
+      // for them now — so the write must not depend on the DOM.
       settings[key] = value;
       const node = $(key);
-      if (!node) continue;
-      if (node.type === 'checkbox') node.checked = value; else node.value = value;
-      commit(key, value);
+      if (node) {
+        if (node.type === 'checkbox') node.checked = value; else node.value = value;
+      }
+      label(key, value);
+      onChange?.(key, value, settings);
     }
+    saveSettings(settings);
   });
 
   return {

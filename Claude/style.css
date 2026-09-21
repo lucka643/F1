@@ -25,6 +25,9 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
+
+  /* On-screen control size: scales with viewport height. */
+  --button: clamp(62px, 15vh, 118px);
 }
 
 * { box-sizing: border-box; }
@@ -412,44 +415,49 @@ kbd {
 }
 
 /* ───────────────────── on-screen driving controls ───────────────────── */
-/* Laid out like a real wheel: pedals under the left thumb, steering under the
-   right. Works with mouse, touch and pen — they are all pointer events. */
-.touch-controls { position: absolute; inset: 0; }
-.touch-controls > div { position: absolute; bottom: calc(var(--safe-b) + 1.1rem); display: flex; gap: 0.7rem; }
-.pedals   { left: calc(var(--safe-l) + 1.1rem); }
-.steering { right: calc(var(--safe-r) + 1.1rem); }
+/* Sized off viewport height so they stay thumb-sized on a phone and don't
+   balloon on a desktop. touch-action:none is what stops a drag on the button
+   turning into a page scroll or a browser gesture mid-corner. */
+.touch-controls { position: absolute; inset: 0; pointer-events: none; }
 
-.pad {
-  appearance: none; cursor: pointer; pointer-events: auto;
-  display: grid; place-items: center; gap: 0.25rem;
-  width: 5.4rem; height: 5.4rem; padding: 0;
-  border: 1px solid var(--line); border-radius: 4px;
-  background: var(--panel); backdrop-filter: blur(12px);
+.pedals, .steering {
+  position: absolute;
+  bottom: max(1.4rem, var(--safe-b));
+  display: flex; gap: 0.75rem;
+  pointer-events: auto;
+}
+.pedals   { left: max(1.4rem, var(--safe-l)); flex-direction: column; }
+.steering { right: max(1.4rem, var(--safe-r)); }
+
+.drive-button {
+  position: relative;
+  width: var(--button); height: var(--button);
+  padding: 14%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   color: var(--text);
-  transition: background 0.1s, transform 0.06s, border-color 0.1s;
-  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none; -webkit-user-select: none;
+  transition: background 0.08s, border-color 0.08s;
 }
-.pad svg { width: 1.9rem; height: 1.9rem; fill: currentColor; }
-.pad span {
-  font-size: 0.5rem; font-weight: 700; letter-spacing: 0.12em;
-  color: var(--muted); line-height: 1;
+.drive-button svg { display: block; width: 100%; height: 100%; fill: currentColor; opacity: 0.72; }
+.drive-button span {
+  position: absolute; bottom: 7%; left: 0; right: 0;
+  font-size: 0.5rem; letter-spacing: 0.1em; opacity: 0.55;
 }
-.pad.throttle { color: var(--green); border-color: rgba(34, 208, 122, 0.3); }
-.pad.brake    { color: var(--accent); border-color: rgba(255, 45, 85, 0.3); }
-.pad:hover { background: rgba(255, 255, 255, 0.09); }
-.pad.pressed {
-  background: rgba(255, 255, 255, 0.22);
-  border-color: rgba(255, 255, 255, 0.4);
-  transform: scale(0.95);
+.drive-button:hover { background: rgba(255, 255, 255, 0.09); }
+.drive-button.pressed {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.55);
 }
-.pad.throttle.pressed { background: rgba(34, 208, 122, 0.3); }
-.pad.brake.pressed    { background: rgba(255, 45, 85, 0.3); }
-
-@media (max-width: 720px), (max-height: 470px) {
-  .pad { width: 4.4rem; height: 4.4rem; }
-  .pad svg { width: 1.5rem; height: 1.5rem; }
-  .pad span { display: none; }
-}
+.drive-button.pressed svg { opacity: 1; }
+/* Throttle and brake read at a glance without needing the label. */
+.pedals .drive-button:first-child { color: var(--green); }
+.pedals .drive-button:last-child  { color: var(--accent); }
 
 /* ─────────────────────────────── results ─────────────────────────────── */
 .results-inner {
@@ -475,31 +483,66 @@ kbd {
 body.photo #hud { display: none; }
 
 /* ───────────────────────────── responsive ───────────────────────────── */
+/* Two phone cases, handled separately because they need opposite things.
+   Landscape is short: everything shrinks vertically and the HUD tucks in.
+   Portrait is narrow but tall: the controls need the bottom third to
+   themselves, so the HUD moves UP rather than getting smaller.
+   Desktop is untouched — every rule here is behind a phone-sized query. */
+
+/* ---- narrow screens: menus and dialogs stack ---- */
 @media (max-width: 860px) {
   .menu-grid { grid-template-columns: 1fr; grid-template-areas: "head" "modes" "options" "foot"; }
   .menu-foot { flex-wrap: wrap; }
-  .menu-foot .btn.primary { margin-left: 0; width: 100%; }
-  .hud-left { display: none; }
-  .readout strong { font-size: 2.1rem; }
-  .cluster { gap: 0.7rem; padding: 0.5rem 0.7rem; }
+  .menu-foot .btn.primary { margin-left: 0; width: 100%; order: 3; }
+  .grid-2 { grid-template-columns: 1fr; }
+  .tab-panel { max-height: 62vh; }
+  dialog#settings { width: calc(100% - 1.5rem); }
+  dialog#settings header, dialog#settings footer, .tab-panel { padding: 1rem; }
+  .tabs { padding: 0 1rem; overflow-x: auto; }
+  .tabs button { white-space: nowrap; }
+}
+
+/* ---- phone landscape: short and wide ---- */
+@media (max-height: 560px) and (orientation: landscape) {
+  :root { --button: clamp(54px, 21vh, 92px); }
+  .hud-left { display: none; }                 /* minimap costs more than it gives here */
+  .hud-top { top: max(0.4rem, var(--safe-t)); }
+  .lap-counter span:first-child, .pos span:first-child { font-size: 1.1rem; }
+  .lap-times .row b { font-size: 0.9rem; }
+  .hud-bottom { bottom: max(0.5rem, var(--safe-b)); }
+  .readout strong { font-size: 1.8rem; min-width: 3ch; }
+  .gear-block b { font-size: 1.4rem; }
   .inputs, .badges { display: none; }
+  .shift-lights i { width: 10px; height: 4px; }
+  .corner { width: 2.1rem; height: 2.1rem; top: max(0.4rem, var(--safe-t)); }
+  .hud-right { top: max(3.2rem, var(--safe-t)); }
+  .pedals, .steering { bottom: max(0.7rem, var(--safe-b)); gap: 0.5rem; }
 }
-@media (max-height: 520px) and (orientation: landscape) {
-  .hud-left { display: none; }
-  .hud-bottom { bottom: calc(var(--safe-b) + 0.4rem); }
-  .readout strong { font-size: 1.9rem; }
+
+/* ---- phone portrait: narrow and tall ---- */
+@media (max-width: 620px) and (orientation: portrait) {
+  :root { --button: clamp(70px, 10.5vh, 96px); }
+  /* Give the bottom third to the controls and lift the cluster clear of them. */
+  .hud-bottom { bottom: calc(max(1.4rem, var(--safe-b)) + var(--button) * 2 + 2.6rem); }
+  .hud-left { left: max(1rem, var(--safe-l)); bottom: calc(max(1.4rem, var(--safe-b)) + var(--button) * 2 + 8rem); }
+  #minimap { width: 92px; height: 92px; }
+  .hud-top { flex-direction: column; align-items: center; gap: 0.35rem; }
+  .readout strong { font-size: 2.4rem; }
+  .inputs { display: none; }
+  .hud-right { top: max(7.5rem, var(--safe-t)); max-width: 62vw; }
+  .pedals   { left: max(1rem, var(--safe-l)); }
+  .steering { right: max(1rem, var(--safe-r)); }
+  /* Menu: one column, and the circuit map should not eat the whole screen. */
+  #menu-map { max-width: 190px; margin: 0 auto; }
+  .wordmark .mark { font-size: 2.4rem; }
 }
+
+/* ---- very short: tuck everything in ---- */
+@media (max-height: 430px) {
+  .hud-top { transform: translateX(-50%) scale(0.86); transform-origin: top center; }
+  .shift-lights { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
-
-/* Build version. Always visible, never in the way. */
-#version {
-  position: absolute; right: calc(var(--safe-r) + 0.9rem); bottom: calc(var(--safe-b) + 0.7rem);
-  font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.1em;
-  color: var(--muted); opacity: 0.55; pointer-events: none; user-select: none;
-}
-#boot-version, #menu-version {
-  font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.12em; margin: 0;
-}
-#menu-version { align-self: center; }

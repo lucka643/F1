@@ -140,21 +140,21 @@
 
   <div class="touch-controls" id="touch-controls" hidden>
     <div class="pedals">
-      <button class="pad throttle" data-control="throttle" aria-label="Accelerate">
-        <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M50 22 84 76H16Z"/></svg>
+      <button class="drive-button" data-control="throttle" aria-label="Accelerate">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M50 23 82 75H18Z"/></svg>
         <span>THROTTLE</span>
       </button>
-      <button class="pad brake" data-control="brake" aria-label="Brake, hold at a stop to reverse">
-        <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M16 24h68L50 78Z"/></svg>
-        <span>BRAKE / REV</span>
+      <button class="drive-button" data-control="brake" aria-label="Brake; hold at a stop to reverse">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M18 25h64L50 77Z"/></svg>
+        <span>BRAKE</span>
       </button>
     </div>
     <div class="steering">
-      <button class="pad steer-left" data-control="left" aria-label="Steer left">
-        <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M24 50 78 18v64Z"/></svg>
+      <button class="drive-button" data-control="left" aria-label="Steer left">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M23 50 75 18v64Z"/></svg>
       </button>
-      <button class="pad steer-right" data-control="right" aria-label="Steer right">
-        <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M76 50 22 18v64Z"/></svg>
+      <button class="drive-button" data-control="right" aria-label="Steer right">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M25 18v64l52-32Z"/></svg>
       </button>
     </div>
   </div>
@@ -183,12 +183,6 @@
     <div class="preset-picker" id="preset-picker"></div>
     <p class="honesty" id="preset-honesty"></p>
     <div class="grid-2">
-      <label>Resolution scale <output id="renderScale-value"></output>
-        <input id="renderScale" type="range" min="0.5" max="1" step="0.05"></label>
-      <label>Field of view <output id="fov-value"></output>
-        <input id="fov" type="range" min="50" max="105" step="1"></label>
-      <label class="toggle"><input id="adaptiveRes" type="checkbox"> Adaptive resolution</label>
-      <label class="toggle"><input id="showFPS" type="checkbox"> Show performance overlay</label>
       <label>Time of day
         <select id="timeOfDay">
           <option value="noon">Noon</option>
@@ -203,52 +197,29 @@
           <option value="damp">Damp</option>
           <option value="wet">Wet</option>
         </select></label>
+      <label class="toggle"><input id="showFPS" type="checkbox"> Performance overlay</label>
     </div>
-    <button id="photo-mode" class="btn ghost">Photo Mode — ray-traced (park first)</button>
   </section>
 
   <section class="tab-panel" data-panel="driving" hidden>
     <div class="grid-2">
-      <label>Assist preset
+      <label>Assists
         <select id="assistPreset">
-          <option value="ARCADE">Arcade</option>
-          <option value="SPORT" selected>Sport</option>
-          <option value="PRO">Pro</option>
+          <option value="ARCADE">Arcade — forgiving</option>
+          <option value="SPORT" selected>Sport — balanced</option>
+          <option value="PRO">Pro — no aids</option>
         </select></label>
-      <label>Traction control
-        <select id="tractionControl">
-          <option value="0">Off</option><option value="1">Medium</option><option value="2" selected>Full</option>
-        </select></label>
-      <label class="toggle"><input id="abs" type="checkbox" checked> Anti-lock brakes</label>
-      <label class="toggle"><input id="stability" type="checkbox" checked> Stability control</label>
-      <label class="toggle"><input id="autoGears" type="checkbox" checked> Automatic gears</label>
-      <label class="toggle"><input id="racingLine" type="checkbox"> Racing line guide</label>
-      <label>Steering sensitivity <output id="steeringSensitivity-value"></output>
-        <input id="steeringSensitivity" type="range" min="0.4" max="1.6" step="0.05"></label>
       <label>Grip — how hard the car sticks <output id="gripLevel-value"></output>
         <input id="gripLevel" type="range" min="0.5" max="1.8" step="0.05"></label>
-      <label>Front wing <output id="frontWing-value"></output>
-        <input id="frontWing" type="range" min="1" max="11" step="1"></label>
-      <label>Rear wing <output id="rearWing-value"></output>
-        <input id="rearWing" type="range" min="1" max="11" step="1"></label>
-      <label>Brake bias <output id="brakeBias-value"></output>
-        <input id="brakeBias" type="range" min="50" max="70" step="0.5"></label>
+      <label>Steering sensitivity <output id="steeringSensitivity-value"></output>
+        <input id="steeringSensitivity" type="range" min="0.4" max="1.6" step="0.05"></label>
+      <label class="toggle"><input id="autoGears" type="checkbox" checked> Automatic gears</label>
     </div>
+    <p class="honesty">Assists set traction control, ABS, stability control and grip together.
+      Adjusting a dial afterwards leaves your choice alone.</p>
   </section>
 
   <section class="tab-panel" data-panel="controls" hidden>
-    <div class="keymap">
-      <div><kbd>W</kbd><kbd>↑</kbd><span>Throttle</span></div>
-      <div><kbd>S</kbd><kbd>↓</kbd><span>Brake / reverse</span></div>
-      <div><kbd>A</kbd><kbd>D</kbd><span>Steer</span></div>
-      <div><kbd>Shift</kbd><kbd>Ctrl</kbd><span>Shift up / down</span></div>
-      <div><kbd>Space</kbd><span>Handbrake</span></div>
-      <div><kbd>E</kbd><span>DRS</span></div>
-      <div><kbd>C</kbd><span>Change camera</span></div>
-      <div><kbd>R</kbd><span>Respawn</span></div>
-      <div><kbd>Esc</kbd><span>Pause</span></div>
-    </div>
-    <p class="muted">A gamepad is detected automatically; analogue triggers and stick are used when present.</p>
     <div class="grid-2">
       <label>Camera
         <select id="camera">
@@ -256,31 +227,39 @@
           <option value="close">Close chase</option>
           <option value="tv">TV pod</option>
           <option value="cockpit">Cockpit</option>
-          <option value="halo">Halo / driver eye</option>
+          <option value="halo">Halo</option>
           <option value="nose">Nose</option>
         </select></label>
-      <label>Chase distance <output id="chaseDistance-value"></output>
-        <input id="chaseDistance" type="range" min="4" max="14" step="0.5"></label>
-      <label class="toggle"><input id="cameraShake" type="checkbox" checked> Camera shake</label>
-      <label class="toggle"><input id="invertLook" type="checkbox"> Invert look</label>
       <label>On-screen controls
         <select id="onScreenControls">
-          <option value="auto">Auto — only on touch devices</option>
+          <option value="auto">Auto — touch devices</option>
           <option value="always">Always show</option>
           <option value="never">Never show</option>
         </select></label>
+      <label>Chase distance <output id="chaseDistance-value"></output>
+        <input id="chaseDistance" type="range" min="4" max="14" step="0.5"></label>
+      <label>Field of view <output id="fov-value"></output>
+        <input id="fov" type="range" min="50" max="105" step="1"></label>
+      <label class="toggle"><input id="cameraShake" type="checkbox" checked> Camera shake</label>
+      <label class="toggle"><input id="invertLook" type="checkbox"> Invert look</label>
+    </div>
+    <div class="keymap">
+      <div><kbd>W</kbd><kbd>S</kbd><span>Throttle / brake</span></div>
+      <div><kbd>A</kbd><kbd>D</kbd><span>Steer</span></div>
+      <div><kbd>Space</kbd><span>Handbrake</span></div>
+      <div><kbd>E</kbd><span>DRS</span></div>
+      <div><kbd>C</kbd><span>Camera</span></div>
+      <div><kbd>R</kbd><span>Respawn</span></div>
+      <div><kbd>Esc</kbd><span>Pause</span></div>
+      <div><kbd>Right-drag</kbd><span>Look around</span></div>
     </div>
   </section>
 
   <section class="tab-panel" data-panel="audio" hidden>
     <div class="grid-2">
       <label class="toggle"><input id="sound" type="checkbox" checked> Sound</label>
-      <label>Master volume <output id="volume-value"></output>
+      <label>Volume <output id="volume-value"></output>
         <input id="volume" type="range" min="0" max="100" step="5"></label>
-      <label>Engine <output id="engineVolume-value"></output>
-        <input id="engineVolume" type="range" min="0" max="100" step="5"></label>
-      <label>Tyres &amp; wind <output id="effectsVolume-value"></output>
-        <input id="effectsVolume" type="range" min="0" max="100" step="5"></label>
     </div>
   </section>
 
