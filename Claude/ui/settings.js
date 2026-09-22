@@ -31,6 +31,7 @@ export const DEFAULTS = {
   racingLine: false,
   steeringSensitivity: 1,
   gripLevel: 1,
+  suspension: true,
   frontWing: 6,
   rearWing: 6,
   brakeBias: 58,

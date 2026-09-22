@@ -193,6 +193,7 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
   let engineRpm = ENGINE.idleRpm;
   let invertedTimer = 0;
   let gripLevel = 1;
+  let suspensionOn = true;
 
   function shapeInput(input, dt, settings) {
     const speed = Math.abs(state.speed);
@@ -305,6 +306,13 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
     // How hard the tyres bite, as a player-facing dial. 1.0 is the tuned
     // baseline; below that the car slides earlier, above it the car is planted.
     gripLevel = Number.isFinite(settings.gripLevel) ? clamp(settings.gripLevel, 0.5, 1.8) : 1;
+    // Suspension off = rigid, not absent: the springs are what hold the car up.
+    // "Off" stiffens them 2.2x, triples the anti-roll bars and adds damping, so
+    // the body stays flat and the wheels stop visibly travelling. Deliberately
+    // not stiffer: at 6x the explicit integrator ran close to its stability
+    // limit in the pitch/roll modes and the car hopped (measured 12 cm of bob
+    // and a wheel off the ground), which is the opposite of the point.
+    suspensionOn = settings.suspension !== false;
     shapeInput(input, dt, settings);
     readBody();
 
@@ -356,7 +364,7 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
         wheel.contact = false;
         wheel.load = 0;
         wheel.suspensionLength = REST_LENGTH + MAX_TRAVEL;
-        wheel.suspensionOffset = -MAX_TRAVEL;  // droop: wheel hangs below its base
+        wheel.suspensionOffset = suspensionOn ? -MAX_TRAVEL : 0;  // droop: wheel hangs below its base
         wheel.slipRatio = 0;
         wheel.slipAngle = 0;
         wheel.skidding *= 0.9;
@@ -377,19 +385,20 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
       const velocityOfChange = (wheel.previousLength - compressedLength) / dt;
       wheel.previousLength = compressedLength;
       wheel.suspensionLength = compressedLength;
-      wheel.suspensionOffset = compression;
+      wheel.suspensionOffset = suspensionOn ? compression : 0;
 
-      const damping = velocityOfChange > 0 ? DAMP_BUMP : DAMP_REBOUND;
+      const damping = (velocityOfChange > 0 ? DAMP_BUMP : DAMP_REBOUND) * (suspensionOn ? 1 : 1.6);
       const aeroLoad = wheel.front ? frontDownforce / 2 : rearDownforce / 2;
-      let springForce = SPRING_RATE * compression + damping * velocityOfChange + aeroLoad;
+      let springForce = SPRING_RATE * (suspensionOn ? 1 : 2.2) * compression + damping * velocityOfChange + aeroLoad;
       springForce = Math.max(0, springForce);
       suspensionForces[wheel.index] = springForce;
     }
 
     // Anti-roll bars couple the two wheels on each axle: the more the car
     // rolls, the more load is pushed back onto the inside wheel.
-    applyAntiRoll(suspensionForces, 0, 1, ANTIROLL_FRONT);
-    applyAntiRoll(suspensionForces, 2, 3, ANTIROLL_REAR);
+    const rollScale = suspensionOn ? 1 : 3;
+    applyAntiRoll(suspensionForces, 0, 1, ANTIROLL_FRONT * rollScale);
+    applyAntiRoll(suspensionForces, 2, 3, ANTIROLL_REAR * rollScale);
 
     const engineTorqueNow = gearChangeTimer > 0 ? 0 : engineTorque(engineRpm, shaped.throttle);
     const gearRatio = state.gear === -1 ? REVERSE_RATIO : GEAR_RATIOS[state.gear] ?? 0;
