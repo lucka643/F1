@@ -59,9 +59,10 @@ all five cars also receive:
   original triangle count, textures resized to 2048 px and re-encoded as WebP,
   then meshopt-compressed. Each car went from 53–69 MB to under 2.5 MB.
 - Scale, orientation and wheel positions are **measured, not assumed**: the
-  car is turned to face +Z, scaled so its wheelbase matches the RB19's 3.54 m,
-  and its wheel centres are taken from the tyre contact patches. See
-  `loadRivalCar` in `Claude/render/car.js`.
+  car is turned to face +Z (by nose overhang, which is ~1.3 m against ~0.7 m
+  at the tail on every car measured), scaled so its wheelbase matches the
+  RB19's 3.54 m, and its wheel centres are taken from the tyre contact
+  patches. See `loadRivalCar` in `Claude/render/car.js`.
 
 **Not included: Mercedes-AMG W14.** The same author's W14 is licensed
 CC BY-NC-ND 4.0, whose "NoDerivatives" term forbids distributing the modified

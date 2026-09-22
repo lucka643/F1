@@ -377,8 +377,14 @@ export async function loadRivalCar(renderer, url, { name = 'Rival', quality = 's
   }
 
   let patches = measurePatches(wrapper, bounds, size);
-  // Front tyres are narrower than rears. The RB19 faces +Z; match it.
-  if (patches.front.width > patches.rear.width) {
+  // Which end is the nose? An F1 car's nose reaches much further past its
+  // front axle (~1.3 m) than its tail does past the rear axle (~0.7 m), on
+  // every car measured including the RB19. Tyre width was tried first and is
+  // not reliable — the rear tyre's contact strip is often clipped by the
+  // floor beside it, which had cars racing backwards. The RB19 faces +Z.
+  const noseAhead = bounds.max.z - patches.front.z;
+  const tailBehind = patches.rear.z - bounds.min.z;
+  if (noseAhead < tailBehind) {
     wrapper.rotation.y += Math.PI;
     wrapper.updateMatrixWorld(true);
     bounds = new THREE.Box3().setFromObject(wrapper);
@@ -405,6 +411,8 @@ export async function loadRivalCar(renderer, url, { name = 'Rival', quality = 's
     new THREE.Vector3( rearX, -0.22, -RB19_WHEELBASE / 2),
     new THREE.Vector3(-rearX, -0.22, -RB19_WHEELBASE / 2),
   ];
+  console.info(`${name}: nose overhang ${noseAhead.toFixed(2)} vs tail ${tailBehind.toFixed(2)}` +
+    `${noseAhead < tailBehind ? ' — turned around' : ''}`);
   console.info(`${name}: wheelbase ${(wheelbase * scale).toFixed(2)} m, track ` +
     `${(frontX * 2).toFixed(2)}/${(rearX * 2).toFixed(2)} m, scale ${scale.toFixed(3)}` +
     `${patches.front.halfTrack * scale > 0.88 || patches.front.halfTrack * scale < 0.72 ? ' (front track clamped)' : ''}`);
