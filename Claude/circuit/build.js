@@ -265,6 +265,17 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
   const surface = await buildRacingSurface(new URL('highway-road.b64', ASSETS).href);
   // Pave the grass between the carriageways before anything measures the road.
   fillCarriagewayGaps(surface);
+  // Face every road triangle up. The median stitch and parts of the source mesh
+  // come out wound downward, and a single-sided material culls those, so the
+  // ground plane showed through as a grass strip down the middle of the road.
+  {
+    const p = surface.positions, idx = surface.indices;
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3;
+      const ny = (p[b + 2] - p[a + 2]) * (p[c] - p[a]) - (p[b] - p[a]) * (p[c + 2] - p[a + 2]);
+      if (ny < 0) { const s = idx[t + 1]; idx[t + 1] = idx[t + 2]; idx[t + 2] = s; }
+    }
+  }
   const circuit = new Circuit(surface);
   const corners = detectCorners(circuit);
 

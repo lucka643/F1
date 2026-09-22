@@ -225,6 +225,7 @@ function onSettingChange(key, value) {
     case 'chaseDistance': game.cameraRig.setChaseDistance(value); break;
     case 'cameraShake': game.cameraRig.setShake(value); break;
     case 'invertLook': game.cameraRig.setInvertLook(value); break;
+    case 'opponentWheels': game.field?.setWheelAnimation(value); break;
     case 'onScreenControls': game.hud.setTouchVisible(shouldShowOnScreenControls()); break;
     case 'assistPreset': case 'gripLevel': break;   // read live by the vehicle each step
     case 'timeOfDay': game.pipeline.setTimeOfDay(value); break;
@@ -366,6 +367,7 @@ function startSession() {
       carAsset: game.car,
       renderer: game.renderer,
       gripLevel: settings.gripLevel,     // the field keeps pace with the player's car
+      animateWheels: settings.opponentWheels,
     });
     for (const rival of game.field.cars) game.pipeline.registerDynamic(rival.root);
   }

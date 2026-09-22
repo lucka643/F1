@@ -55,7 +55,9 @@ const GRIP_K = 0.00108;
 const TOP_SPEED = 86.4;
 const TOP_SPEED_DRS = 93.3;
 const DRS_CURVATURE = 0.0035;           // same threshold the player's DRS uses
-const RIDE_HEIGHT = 0.585;              // car origin above the road, as the player's car rests
+const RIDE_HEIGHT = 0.585;
+// km/h at the top of each of the 8 gears, for a believable engine note.
+const GEAR_TOPS = [95, 135, 170, 205, 240, 270, 295, 340];              // car origin above the road, as the player's car rests
 
 function table(t, v) {
   if (v <= t[0][0]) return t[0][1];
@@ -139,6 +141,8 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
   // leave you shown behind it.
   const signedStart = d => (d > circuit.lapLength / 2 ? d - circuit.lapLength : d);
   const player = { progress: null, last: null };
+  // Wheel steer/spin animation can be switched off on low-power devices.
+  let animateWheels = options.animateWheels !== false;
 
   for (let i = 0; i < count; i++) {
     const team = TEAMS[i % TEAMS.length];
@@ -256,7 +260,9 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       const drs = Math.abs(here.curvature) < DRS_CURVATURE;
       if (target > car.speed) {
         car.speed = Math.min(target, car.speed + table(drs ? ACCEL_DRS : ACCEL, car.speed) * h);
+        car.state.throttle = 1;
       } else {
+        car.state.throttle = target < car.speed - 0.5 ? 0 : 0.35;
         car.speed = Math.max(target, car.speed - table(BRAKE, car.speed) * h);
       }
       car.speed = clamp(car.speed, 0, drs ? TOP_SPEED_DRS : TOP_SPEED);
@@ -311,12 +317,54 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       // Pitch with the road so the nose and tail do not dig into slopes.
       const behind = circuit.lineAt(car.lineDistance - 3), aheadP = circuit.lineAt(car.lineDistance + 3);
       const pitch = Math.atan2(aheadP.y - behind.y, 6);
-      const roll = clamp(-point.curvature * car.speed * car.speed * 0.0009, -0.08, 0.08);
+
+      // Heading follows the direction the car is ACTUALLY moving, not the
+      // racing line's tangent. Before, a car stepping aside to pass kept
+      // pointing straight down the line and slid sideways like a crab; now it
+      // turns toward where it is going, exactly as a real car has to.
+      const moveX = x - car.lastX, moveZ = z - car.lastZ;
+      const moved = Math.hypot(moveX, moveZ);
+      let yaw = car.yaw ?? Math.atan2(point.tx, point.tz);
+      if (Number.isFinite(car.lastX) && moved > 0.02) {
+        const target = Math.atan2(moveX, moveZ);
+        let dy = target - yaw;
+        while (dy > Math.PI) dy -= 2 * Math.PI;
+        while (dy < -Math.PI) dy += 2 * Math.PI;
+        yaw += dy * Math.min(1, h * 14);                    // light smoothing of frame jitter
+      } else if (!Number.isFinite(car.lastX)) {
+        yaw = Math.atan2(point.tx, point.tz);
+      }
+      let yawRate = 0;
+      if (car.yaw !== undefined) {
+        let dy = yaw - car.yaw;
+        while (dy > Math.PI) dy -= 2 * Math.PI;
+        while (dy < -Math.PI) dy += 2 * Math.PI;
+        yawRate = dy / Math.max(h, 1e-3);
+      }
+      car.vx = moved > 0 ? moveX / Math.max(h, 1e-3) : 0;
+      car.vz = moved > 0 ? moveZ / Math.max(h, 1e-3) : 0;
+      car.yaw = yaw; car.lastX = x; car.lastZ = z;
+
+      // Roll outward in proportion to lateral acceleration (speed x yaw rate).
+      const lateralG = car.speed * (car.yawRateSmooth ?? yawRate) / 9.81;
+      const roll = clamp(lateralG * 0.012, -0.06, 0.06);
       car.bodyRoll += (roll - car.bodyRoll) * Math.min(1, h * 4);
-      yawQuat.setFromAxisAngle(up, Math.atan2(point.tx, point.tz));
+      yawQuat.setFromAxisAngle(up, yaw);
       pitchQuat.setFromAxisAngle(across, -pitch);
       rollQuat.setFromAxisAngle(forwardAxis, car.bodyRoll);
       car.root.quaternion.copy(yawQuat).multiply(pitchQuat).multiply(rollQuat);
+
+      // Front-wheel angle from the turn actually being made: the geometric
+      // (Ackermann) angle for this yaw rate and speed, atan(wheelbase * r / v),
+      // with the extra lock a driver adds to generate tyre slip. Sharp corners
+      // get a lot, fast sweepers a little, lane changes a flick either way.
+      // Rate-limited like the player's steering so it never snaps.
+      // The yaw rate is low-passed first: a one-frame nudge back onto the
+      // tarmac is not a steering input and must not flick the wheels.
+      car.yawRateSmooth = (car.yawRateSmooth ?? 0) + (yawRate - (car.yawRateSmooth ?? 0)) * Math.min(1, h * 22);
+      const maxLock = 0.44 / (1 + car.speed * 0.016);          // the player's own speed-dependent lock limit
+      const wanted = clamp(Math.atan(3.54 * car.yawRateSmooth / Math.max(car.speed, 4)) * 2.0, -maxLock, maxLock);
+      car.steer = (car.steer ?? 0) + clamp(wanted - (car.steer ?? 0), -9 * h, 9 * h);
 
       // --- progress, from where the car actually is ---
       const located = circuit.locate(x, z);
@@ -328,17 +376,26 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       car.centreOffset = located.offset;
 
       // --- wheels ---
-      car.spinAngle = (car.spinAngle + (car.speed / 0.375) * h) % (Math.PI * 2);
-      // Left turns have negative curvature here, and a positive Y rotation
-      // turns the wheel left — so the sign is flipped, as for the player's car.
-      const steerAngle = clamp(-point.curvature * 3.54, -0.35, 0.35);
-      for (const wheel of car.wheels) {
-        wheel.spin.rotation.x = car.spinAngle;
-        if (wheel.front) wheel.steer.rotation.y = steerAngle;
+      if (animateWheels) {
+        car.spinAngle = (car.spinAngle + (car.speed / 0.375) * h) % (Math.PI * 2);
+        for (const wheel of car.wheels) {
+          wheel.spin.rotation.x = car.spinAngle;
+          // Same convention as the car's yaw: a positive Y rotation turns the
+          // wheel the way a positive yaw rate turns the car.
+          if (wheel.front) wheel.steer.rotation.y = car.steer;
+        }
       }
 
       car.state.speedKmh = car.speed * 3.6;
-      car.state.rpm = 5000 + Math.min(1, car.speed / TOP_SPEED) * 9000;
+      // Revs climb through each gear and drop on the upshift, like the player's
+      // 8-speed box, so the engine note sounds like it is changing gear.
+      const kmh = car.speed * 3.6;
+      let gear = GEAR_TOPS.findIndex(t => kmh < t);
+      if (gear < 0) gear = GEAR_TOPS.length - 1;
+      const low = gear === 0 ? 0 : GEAR_TOPS[gear - 1] * 0.62, high = GEAR_TOPS[gear];
+      car.state.rpm = 6500 + clamp((kmh - low) / Math.max(1, high - low), 0, 1) * 8200;
+      car.state.gear = gear + 1;
+      car.state.velocity = { x: car.vx ?? 0, z: car.vz ?? 0 };
     }
   }
 
@@ -372,6 +429,16 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
   }
 
   function setCount() { /* field size is fixed for a session */ }
+  function setWheelAnimation(on) {
+    animateWheels = !!on;
+    if (!animateWheels) {
+      for (const car of cars) for (const wheel of car.wheels) {
+        wheel.spin.rotation.x = 0;
+        if (wheel.front) wheel.steer.rotation.y = 0;
+      }
+    }
+  }
+
   function setSkill(value) {
     const skill = clamp(value, 0, 1);
     cars.forEach((car, i) => {
@@ -390,7 +457,7 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     cars.length = 0;
   }
 
-  return { cars, root, step, classification, setCount, setSkill, dispose,
+  return { cars, root, step, classification, setCount, setSkill, setWheelAnimation, dispose,
     get playerProgress() { return player.progress; } };
 }
 

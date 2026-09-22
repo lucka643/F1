@@ -20,6 +20,7 @@ export const DEFAULTS = {
   fov: 72,
   adaptiveRes: true,
   showFPS: false,
+  opponentWheels: true,     // animate AI wheel steer/spin; off helps low-power devices
   timeOfDay: 'afternoon',
   weather: 'clear',
   // driving
