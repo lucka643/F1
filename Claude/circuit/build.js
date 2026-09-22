@@ -13,7 +13,7 @@ import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { buildRacingSurface } from './roadmesh.js';
-import { Circuit } from './racingline.js';
+import { Circuit, fillCarriagewayGaps } from './racingline.js';
 
 const ASSETS = new URL('../../Codex/assets/', import.meta.url);
 const REALISM = new URL('realism/', ASSETS);
@@ -263,6 +263,8 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
     renderer?.capabilities?.getMaxAnisotropy?.() ?? 8);
 
   const surface = await buildRacingSurface(new URL('highway-road.b64', ASSETS).href);
+  // Pave the grass between the carriageways before anything measures the road.
+  fillCarriagewayGaps(surface);
   const circuit = new Circuit(surface);
   const corners = detectCorners(circuit);
 

@@ -143,7 +143,7 @@ class SurfaceIndex {
  * Runs once per pass; two passes let the frames re-derive from the corrected
  * centres so the normals themselves improve.
  */
-function refineCentreline(samples, surfaceIndex, { probeStep = 0.25, probeReach = 14 } = {}) {
+function refineCentreline(samples, surfaceIndex, { probeStep = 0.25, probeReach = 18 } = {}) {
   let moved = 0;
   // Walk the loop in order and carry the previous sample's corrected height
   // forward as the seed. Samples are ~6 m apart, so the road can only rise or
@@ -258,6 +258,103 @@ function smoothWidths(samples, passes = 1) {
       samples[i].width = (copy[(i - 1 + n) % n] + 2 * copy[i] + copy[(i + 1) % n]) / 4;
     }
   }
+}
+
+
+/* ------------------------------------------------------- gap infill */
+
+/**
+ * Pave the grass between the two carriageways.
+ *
+ * Median stitching joins the carriageways only where they are 0.57-0.75 m
+ * apart. Along much of the lap they run parallel with a wider gap — measured
+ * 2-25 m — and that gap showed as strips of grass down the middle of the road.
+ *
+ * This walks the lap every ~2 m, scans sideways for runs of road, and paves any
+ * gap between two runs. Measured, every such gap is in the interchange section,
+ * where one carriageway drops as much as 2.7 m below the other while they
+ * separate by up to 16 m. The paving interpolates height between the two edges,
+ * so it is a smooth cross-slope of at most ~15 degrees, not a step; slopes
+ * steeper than that are left alone rather than paved into a ramp.
+ *
+ * It runs on the raw surface BEFORE the Circuit is constructed, so the corridor
+ * measurement, racing line, track limits, physics collider, road markings and
+ * AI all see one continuous road rather than being patched afterwards.
+ *
+ * @returns number of triangles added
+ */
+export function fillCarriagewayGaps(surface, { maxGap = 17.5, maxSlope = 0.28, reach = 32, probe = 0.25, sink = 0.015 } = {}) {
+  const index = new SurfaceIndex(surface.positions, surface.indices);
+  const seed = surface.centreline;
+  const n = seed.length;
+  const SUB = 3;                                           // ~2 m stations
+
+  // 1. Stations: seed samples plus interpolated ones between them.
+  const stations = [];
+  for (let i = 0; i < n; i++) {
+    const a = seed[i], b = seed[(i + 1) % n];
+    for (let k = 0; k < SUB; k++) {
+      const t = k / SUB;
+      let nx = a.nx + (b.nx - a.nx) * t, nz = a.nz + (b.nz - a.nz) * t;
+      const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
+      stations.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t, nx, nz });
+    }
+  }
+
+  // 2. For each station, the qualifying gaps between runs of road.
+  const gapsAt = stations.map(st => {
+    const runs = [];
+    let cur = null;
+    for (let t = -reach; t <= reach + 1e-6; t += probe) {
+      const h = index.heightAt(st.x + st.nx * t, st.z + st.nz * t, st.y);
+      const on = h !== null && Math.abs(h - st.y) < 4;
+      if (on) { if (!cur) cur = { a: t, b: t, ha: h, hb: h }; cur.b = t; cur.hb = h; }
+      else if (cur) { runs.push(cur); cur = null; }
+    }
+    if (cur) runs.push(cur);
+    const gaps = [];
+    for (let i = 0; i + 1 < runs.length; i++) {
+      const left = runs[i], right = runs[i + 1];
+      const width = right.a - left.b;
+      const rise = Math.abs(right.ha - left.hb);
+      if (width > probe * 1.5 && width <= maxGap && rise / width <= maxSlope) {
+        gaps.push({ t0: left.b, t1: right.a, h0: left.hb, h1: right.ha });
+      }
+    }
+    return gaps;
+  });
+
+  // 3. Join matching gaps on neighbouring stations into quads.
+  const positions = Array.from(surface.positions);
+  const indices = Array.from(surface.indices);
+  let added = 0;
+  const vertex = (st, t, h) => {
+    positions.push(st.x + st.nx * t, h - sink, st.z + st.nz * t);
+    return positions.length / 3 - 1;
+  };
+  const m = stations.length;
+  for (let i = 0; i < m; i++) {
+    const A = stations[i], B = stations[(i + 1) % m];
+    for (const g of gapsAt[i]) {
+      // The gap on the next station that overlaps this one laterally.
+      const h = gapsAt[(i + 1) % m].find(o => o.t0 < g.t1 && o.t1 > g.t0);
+      if (!h) continue;
+      const a0 = vertex(A, g.t0, g.h0), a1 = vertex(A, g.t1, g.h1);
+      const b0 = vertex(B, h.t0, h.h0), b1 = vertex(B, h.t1, h.h1);
+      for (const [p, q, r] of [[a0, a1, b1], [a0, b1, b0]]) {
+        // Wind every triangle to face up so it renders from above.
+        const ux = positions[q*3] - positions[p*3], uz = positions[q*3+2] - positions[p*3+2];
+        const vx = positions[r*3] - positions[p*3], vz = positions[r*3+2] - positions[p*3+2];
+        const upward = uz * vx - ux * vz;                  // y of (u x v)
+        if (upward >= 0) indices.push(p, q, r); else indices.push(p, r, q);
+        added++;
+      }
+    }
+  }
+  surface.positions = new Float32Array(positions);
+  surface.indices = new Uint32Array(indices);
+  if (surface.stats) surface.stats.infillTriangles = added;
+  return added;
 }
 
 /* -------------------------------------------------------- racing line */
