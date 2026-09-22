@@ -306,12 +306,15 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
     // How hard the tyres bite, as a player-facing dial. 1.0 is the tuned
     // baseline; below that the car slides earlier, above it the car is planted.
     gripLevel = Number.isFinite(settings.gripLevel) ? clamp(settings.gripLevel, 0.5, 1.8) : 1;
-    // Suspension off = rigid, not absent: the springs are what hold the car up.
-    // "Off" stiffens them 2.2x, triples the anti-roll bars and adds damping, so
-    // the body stays flat and the wheels stop visibly travelling. Deliberately
-    // not stiffer: at 6x the explicit integrator ran close to its stability
-    // limit in the pitch/roll modes and the car hopped (measured 12 cm of bob
-    // and a wheel off the ground), which is the opposite of the point.
+    // Suspension off keeps the car flat WITHOUT stiffening the springs.
+    //
+    // The previous version stiffened springs 2.2x. Tyre grip is proportional
+    // to how hard the tyre is pressed into the road, and on this coarse mesh a
+    // stiff spring makes that load spike and drop as the car crosses triangle
+    // seams at speed: wheels went light or left the road entirely, so there
+    // was nothing for the grip setting to multiply and the car slid out on
+    // every corner. Now the springs are exactly the suspension-on springs, and
+    // flatness comes from a separate stabiliser torque (see levelBody below).
     suspensionOn = settings.suspension !== false;
     shapeInput(input, dt, settings);
     readBody();
@@ -387,16 +390,16 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
       wheel.suspensionLength = compressedLength;
       wheel.suspensionOffset = suspensionOn ? compression : 0;
 
-      const damping = (velocityOfChange > 0 ? DAMP_BUMP : DAMP_REBOUND) * (suspensionOn ? 1 : 1.6);
+      const damping = (velocityOfChange > 0 ? DAMP_BUMP : DAMP_REBOUND);
       const aeroLoad = wheel.front ? frontDownforce / 2 : rearDownforce / 2;
-      let springForce = SPRING_RATE * (suspensionOn ? 1 : 2.2) * compression + damping * velocityOfChange + aeroLoad;
+      let springForce = SPRING_RATE * compression + damping * velocityOfChange + aeroLoad;
       springForce = Math.max(0, springForce);
       suspensionForces[wheel.index] = springForce;
     }
 
     // Anti-roll bars couple the two wheels on each axle: the more the car
     // rolls, the more load is pushed back onto the inside wheel.
-    const rollScale = suspensionOn ? 1 : 2;
+    const rollScale = 1;
     applyAntiRoll(suspensionForces, 0, 1, ANTIROLL_FRONT * rollScale);
     applyAntiRoll(suspensionForces, 2, 3, ANTIROLL_REAR * rollScale);
 
@@ -539,6 +542,8 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
       body.addTorque({ x: 0, y: correction, z: 0 }, true);
     }
 
+    if (!suspensionOn && contacts >= 2) levelBody(dt);
+
     state.airborne = contacts === 0;
 
     // Parking brake: with no pedal input and the car essentially stopped, damp
@@ -602,6 +607,48 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
     // than propagating NaN into the renderer.
     if (!Number.isFinite(state.position.x + state.position.y + state.position.z)) recover();
     if (state.position.y < -60) recover();
+  }
+
+
+  /**
+   * Suspension-off stabiliser: hold the body parallel to the road.
+   *
+   * A torque pulls the car's up-vector toward the average road normal under
+   * the wheels, with damping on the roll and pitch rates. It is measured
+   * against the road, not the world, so it follows the circuit's slopes
+   * instead of fighting them. Yaw is left completely free — steering is
+   * untouched.
+   *
+   * Because the body no longer leans, cornering load stays more evenly spread
+   * across the tyres, so if anything the car grips a little more than with
+   * suspension on. The spring model itself is identical in both modes.
+   */
+  const levelNormal = new THREE.Vector3();
+  const bodyForward = new THREE.Vector3();
+  const bodyRight = new THREE.Vector3();
+  const bodyUp = new THREE.Vector3();
+  const tilt = new THREE.Vector3();
+  const LEVEL_ROLL = { stiffness: 45000, damping: 4500 };     // ~3.6 Hz, critically damped
+  const LEVEL_PITCH = { stiffness: 150000, damping: 15000 };  // pitch inertia is ~13x roll
+  function levelBody() {
+    levelNormal.set(0, 0, 0);
+    for (const wheel of wheels) if (wheel.contact) levelNormal.add(wheel.contactNormal);
+    if (levelNormal.lengthSq() < 1e-6) return;
+    levelNormal.normalize();
+    bodyForward.set(0, 0, 1).applyQuaternion(state.quaternion);
+    bodyRight.set(-1, 0, 0).applyQuaternion(state.quaternion);
+    bodyUp.set(0, 1, 0).applyQuaternion(state.quaternion);
+    tilt.crossVectors(bodyUp, levelNormal);                   // axis * sin(angle) toward level
+    const w = body.angvel();
+    const rollRate = w.x * bodyForward.x + w.y * bodyForward.y + w.z * bodyForward.z;
+    const pitchRate = w.x * bodyRight.x + w.y * bodyRight.y + w.z * bodyRight.z;
+    const rollTorque = LEVEL_ROLL.stiffness * tilt.dot(bodyForward) - LEVEL_ROLL.damping * rollRate;
+    const pitchTorque = LEVEL_PITCH.stiffness * tilt.dot(bodyRight) - LEVEL_PITCH.damping * pitchRate;
+    body.addTorque({
+      x: bodyForward.x * rollTorque + bodyRight.x * pitchTorque,
+      y: bodyForward.y * rollTorque + bodyRight.y * pitchTorque,
+      z: bodyForward.z * rollTorque + bodyRight.z * pitchTorque,
+    }, true);
   }
 
   function applyAntiRoll(forces, leftIndex, rightIndex, rate) {
