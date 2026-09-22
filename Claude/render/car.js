@@ -316,18 +316,8 @@ function hslToRgb(h, s, l) {
  * @returns { root, wheels, material, sync, dispose }
  */
 export async function loadCar(renderer, { quality = 'standard', onProgress } = {}) {
-  const draco = new DRACOLoader().setDecoderPath(DRACO_PATH);
-  const loader = new GLTFLoader().setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder);
   const file = quality === 'ultra' ? 'rb19-ultra.glb' : 'rb19.glb';
-
-  let gltf;
-  try {
-    gltf = await loader.loadAsync(new URL(file, ASSETS).href, event => {
-      if (event.lengthComputable) onProgress?.(event.loaded / event.total);
-    });
-  } finally {
-    draco.dispose();
-  }
+  const gltf = await loadGltf(new URL(file, ASSETS).href, onProgress);
 
   // De-quantize every mesh before anything measures or transforms it.
   gltf.scene.traverse(object => { if (object.isMesh && object.geometry) dequantize(object.geometry); });
@@ -344,8 +334,147 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
     bounds.min.y + TYRE_RADIUS / scale,
     bounds.min.z + size.z * 0.44765);
 
+  return assembleCar(gltf, renderer, { name: 'RB19', scale, origin, centres: WHEEL_CENTRES, quality });
+}
+
+async function loadGltf(url, onProgress) {
+  const draco = new DRACOLoader().setDecoderPath(DRACO_PATH);
+  const loader = new GLTFLoader().setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder);
+  try {
+    return await loader.loadAsync(url, event => {
+      if (event.lengthComputable) onProgress?.(event.loaded / event.total);
+    });
+  } finally {
+    draco.dispose();
+  }
+}
+
+/**
+ * Load another team's car from the same modeller for an opponent.
+ *
+ * These share the RB19's construction but not necessarily its pivot, scale or
+ * exact wheel placement, so instead of hard-coding anything the model is
+ * measured: the tyre contact patches (the lowest few centimetres of geometry)
+ * give the axles and track, the narrower pair is the front, and the car is
+ * scaled so its wheelbase matches the RB19's 3.54 m. Every car then sits on
+ * the same footprint, ride height and wheel positions the physics assumes.
+ */
+export async function loadRivalCar(renderer, url, { name = 'Rival', quality = 'standard' } = {}) {
+  const gltf = await loadGltf(url);
+  gltf.scene.traverse(object => { if (object.isMesh && object.geometry) dequantize(object.geometry); });
+  const wrapper = new THREE.Group();
+  wrapper.add(gltf.scene);
+  wrapper.updateMatrixWorld(true);
+
+  // Lengthwise along X? Turn it to run along Z like the RB19.
+  let bounds = new THREE.Box3().setFromObject(wrapper);
+  let size = bounds.getSize(new THREE.Vector3());
+  if (size.x > size.z) {
+    wrapper.rotation.y = Math.PI / 2;
+    wrapper.updateMatrixWorld(true);
+    bounds = new THREE.Box3().setFromObject(wrapper);
+    size = bounds.getSize(new THREE.Vector3());
+  }
+
+  let patches = measurePatches(wrapper, bounds, size);
+  // Front tyres are narrower than rears. The RB19 faces +Z; match it.
+  if (patches.front.width > patches.rear.width) {
+    wrapper.rotation.y += Math.PI;
+    wrapper.updateMatrixWorld(true);
+    bounds = new THREE.Box3().setFromObject(wrapper);
+    size = bounds.getSize(new THREE.Vector3());
+    patches = measurePatches(wrapper, bounds, size);
+  }
+
+  const wheelbase = patches.front.z - patches.rear.z;
+  if (!(wheelbase > 0.2)) throw new Error(`${name}: could not find its wheels`);
+  const RB19_WHEELBASE = WHEEL_CENTRES[0].z - WHEEL_CENTRES[2].z;
+  const scale = RB19_WHEELBASE / wheelbase;
+  const midZ = (patches.front.z + patches.rear.z) / 2;
+  const origin = new THREE.Vector3(
+    (bounds.min.x + bounds.max.x) / 2,
+    bounds.min.y + TYRE_RADIUS / scale,
+    midZ);
+  // Real F1 tracks are 1.4-1.7 m; clamp so a mis-measured axle cannot give a
+  // car stilts or wheels inside its own bodywork.
+  const halfTrack = (x, fallback) => Math.max(0.72, Math.min(0.88, Number.isFinite(x) ? x * scale : fallback));
+  const frontX = halfTrack(patches.front.halfTrack, 0.8), rearX = halfTrack(patches.rear.halfTrack, 0.8);
+  const centres = [
+    new THREE.Vector3( frontX, -0.22,  RB19_WHEELBASE / 2),
+    new THREE.Vector3(-frontX, -0.22,  RB19_WHEELBASE / 2),
+    new THREE.Vector3( rearX, -0.22, -RB19_WHEELBASE / 2),
+    new THREE.Vector3(-rearX, -0.22, -RB19_WHEELBASE / 2),
+  ];
+  console.info(`${name}: wheelbase ${(wheelbase * scale).toFixed(2)} m, track ` +
+    `${(frontX * 2).toFixed(2)}/${(rearX * 2).toFixed(2)} m, scale ${scale.toFixed(3)}` +
+    `${patches.front.halfTrack * scale > 0.88 || patches.front.halfTrack * scale < 0.72 ? ' (front track clamped)' : ''}`);
+  const car = assembleCar(gltf, renderer, { name, scale, origin, centres, quality, wrapper });
+  car.realLivery = true;          // a real team car: never hue-shift it
+  return car;
+}
+
+/**
+ * Tyre contact patches: the lowest slice of geometry, per axle and side.
+ *
+ * A flat F1 floor sits almost as low as the tyres — on the W14 it is within
+ * two centimetres — so a plain average over the low band walks the "wheel"
+ * inboard and the car ends up on narrow, wrongly sized wheels. Only the outer
+ * 60% of each side's low points is used, which is tyre and never floor.
+ */
+function measurePatches(wrapper, bounds, size) {
+  const cx = (bounds.min.x + bounds.max.x) / 2, cz = (bounds.min.z + bounds.max.z) / 2;
+  const limit = bounds.min.y + size.y * 0.02;
+  const groups = { front: [], rear: [] };
+  const v = new THREE.Vector3();
+  wrapper.traverse(object => {
+    if (!object.isMesh) return;
+    const position = object.geometry.attributes.position;
+    for (let i = 0; i < position.count; i++) {
+      v.fromBufferAttribute(position, i).applyMatrix4(object.matrixWorld);
+      if (v.y > limit) continue;
+      (v.z > cz ? groups.front : groups.rear).push([v.x, v.z]);
+    }
+  });
+  const mean = a => a.reduce((s, q) => s + q, 0) / a.length;
+  // Walk inboard from the outermost point and stop at the first real gap: that
+  // run of points is the tyre, and anything further in is floor or bodywork.
+  const tyre = points => {
+    const sorted = points.slice().sort((p, q) => Math.abs(q[0] - cx) - Math.abs(p[0] - cx));
+    const gap = size.x * 0.03;
+    const run = [sorted[0]];
+    for (let i = 1; i < sorted.length; i++) {
+      if (Math.abs(Math.abs(sorted[i][0] - cx) - Math.abs(sorted[i - 1][0] - cx)) > gap) break;
+      run.push(sorted[i]);
+    }
+    return run;
+  };
+  const summarise = points => {
+    if (!points.length) return { z: NaN, width: 0, halfTrack: NaN };
+    const right = points.filter(p => p[0] > cx), left = points.filter(p => p[0] <= cx);
+    if (!right.length || !left.length) return { z: mean(points.map(p => p[1])), width: 0, halfTrack: NaN };
+    const [R, L] = [tyre(right), tyre(left)];
+    const span = side => {
+      const xs = side.map(p => p[0]);
+      return { centre: (Math.min(...xs) + Math.max(...xs)) / 2, width: Math.max(...xs) - Math.min(...xs) };
+    };
+    const [rs, ls] = [span(R), span(L)];
+    return {
+      z: mean(R.concat(L).map(p => p[1])),
+      width: (rs.width + ls.width) / 2,
+      halfTrack: (rs.centre - ls.centre) / 2,
+    };
+  };
+  return { front: summarise(groups.front), rear: summarise(groups.rear) };
+}
+
+/**
+ * Split a loaded car into chassis, spinning wheels and steering fairings, in
+ * car space: origin at the centre of mass, +Z forward, wheel centres given.
+ */
+function assembleCar(gltf, renderer, { name, scale, origin, centres, quality, wrapper = null }) {
+  const WHEEL_CENTRES = centres;
   const root = new THREE.Group();
-  root.name = 'RB19';
+  root.name = name;
   const chassis = new THREE.Group();
   root.add(chassis);
 
@@ -360,6 +489,7 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
   });
 
   let sharedMaterial = null;
+  const upgraded = new Map();          // one upgraded material per source material
 
   gltf.scene.traverse(object => {
     if (!object.isMesh || !object.geometry?.attributes.position) return;
@@ -412,7 +542,9 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
     }
 
     const source = Array.isArray(object.material) ? object.material[0] : object.material;
-    sharedMaterial ??= upgradeMaterial(source, renderer, quality === 'ultra' ? 'high' : 'mid');
+    if (!upgraded.has(source)) upgraded.set(source, upgradeMaterial(source, renderer, quality === 'ultra' ? 'high' : 'mid'));
+    const material = upgraded.get(source);
+    sharedMaterial ??= material;
 
     buckets.forEach((triangles, bucket) => {
       if (!triangles.length) return;
@@ -423,7 +555,7 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
         const c = WHEEL_CENTRES[wheelIndex];
         part.translate(-c.x, -c.y, -c.z);
       }
-      const mesh = new THREE.Mesh(part, sharedMaterial);
+      const mesh = new THREE.Mesh(part, material);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;   // the car is always relevant
@@ -437,7 +569,7 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
   });
 
   // Release the loader's copy; ours is rebuilt.
-  gltf.scene.traverse(object => object.geometry?.dispose());
+  (wrapper ?? gltf.scene).traverse(object => object.geometry?.dispose());
 
   // Sanity-check the result instead of silently shipping a broken car.
   const measured = new THREE.Box3().setFromObject(root);
@@ -457,7 +589,7 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
     }
   }
   if (Math.abs(measuredSize.z - CAR_LENGTH) > 0.6 || emptyWheels > 0) {
-    console.warn(`RB19 assembly looks wrong: length ${measuredSize.z.toFixed(2)} m ` +
+    console.warn(`${name} assembly looks wrong: length ${measuredSize.z.toFixed(2)} m ` +
       `(expected ${CAR_LENGTH}), ${emptyWheels} wheel group(s) empty.`);
   }
 
@@ -488,9 +620,12 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
     root.traverse(object => {
       object.geometry?.dispose();
     });
-    sharedMaterial?.map?.dispose();
-    sharedMaterial?.roughnessMap?.dispose();
-    sharedMaterial?.dispose();
+    for (const material of upgraded.values()) {
+      material.map?.dispose();
+      material.normalMap?.dispose();
+      material.roughnessMap?.dispose();
+      material.dispose();
+    }
   }
 
   return { root, chassis, wheels, material: sharedMaterial, sync, dispose };

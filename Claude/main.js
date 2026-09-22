@@ -19,7 +19,7 @@ import RAPIER from 'rapier';
 import { buildCircuit } from './circuit/build.js';
 import { createVehicle } from './sim/vehicle.js';
 import { createPipeline, detectCapabilities } from './render/pipeline.js';
-import { loadCar } from './render/car.js';
+import { loadCar, loadRivalCar } from './render/car.js';
 import { createCameraRig, RIG_LABELS } from './render/camera.js';
 import { PRESETS } from './render/presets.js';
 import { createInput } from './game/input.js';
@@ -105,6 +105,24 @@ async function boot() {
   });
   scene.add(car.root);
 
+  // The opponents' cars: one model per team, loaded once and shared by every
+  // car of that team. A model that fails to load is simply left out, and the
+  // field falls back to a recoloured copy of the player's car for that team.
+  progress(0.72, 'Loading the opposition…');
+  const rivalAssets = new Map();
+  const rivalFiles = ['ferrari-sf23.glb', 'mclaren-mcl60.glb',
+    'aston-martin-amr23.glb', 'alpine-a523.glb', 'alphatauri-at04.glb'];
+  await Promise.all(rivalFiles.map(async (file, i) => {
+    try {
+      const model = await loadRivalCar(renderer, new URL(`assets/cars/${file}`, import.meta.url).href,
+        { name: file.replace('.glb', '') });
+      rivalAssets.set(file, model);
+    } catch (error) {
+      console.warn(`Opponent car ${file} failed to load:`, error);
+    }
+    progress(0.72 + ((i + 1) / rivalFiles.length) * 0.02, 'Loading the opposition…');
+  }));
+
   progress(0.74, 'Building the render pipeline…');
   const pipeline = createPipeline(renderer, scene, camera, { capabilities });
   pipeline.setPreset(settings.preset);
@@ -142,7 +160,7 @@ async function boot() {
   progress(0.96, 'Ready');
 
   Object.assign(game, {
-    renderer, scene, camera, world, track, circuit, car,
+    renderer, scene, camera, world, track, circuit, car, rivalAssets,
     pipeline, vehicle, cameraRig, hud, input, timing, audio, field: null,
   });
 
@@ -368,6 +386,7 @@ function startSession() {
       gridSlots: game.track.gridSlots,
       playerSlot: slotIndex,
       carAsset: game.car,
+      rivalAssets: game.rivalAssets,
       renderer: game.renderer,
       gripLevel: settings.gripLevel,     // the field keeps pace with the player's car
       animateWheels: settings.opponentWheels,

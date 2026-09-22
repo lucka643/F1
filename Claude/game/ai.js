@@ -18,23 +18,46 @@
 import * as THREE from 'three';
 import { makeLiveryTexture } from '../render/car.js';
 
+/**
+ * The opponents. Each is a real 2023 car by Redgrund, the modeller of the
+ * player's RB19, processed identically (see render/car.js). Red Bull is the
+ * player's car and is never given to an opponent.
+ *
+ * Mercedes is deliberately absent: that model is licensed CC BY-NC-ND, which
+ * forbids publishing the modified copy this game would need. Every car here is
+ * CC BY 4.0. See CREDITS.md.
+ */
 const TEAMS = [
-  { name: 'Verhoeven',  hue: 0.00, colour: '#1e3a8a' },
-  { name: 'Marchetti',  hue: 0.52, colour: '#d81e32' },
-  { name: 'Okonkwo',    hue: 0.28, colour: '#00a19c' },
-  { name: 'Lindqvist',  hue: 0.13, colour: '#ff8000' },
-  { name: 'Duval',      hue: 0.75, colour: '#6c4ad0' },
-  { name: 'Tanaka',     hue: 0.42, colour: '#00b34a' },
-  { name: 'Salvatierra',hue: 0.88, colour: '#e0218a' },
-  { name: 'Brennan',    hue: 0.62, colour: '#2f6fd0' },
-  { name: 'Novak',      hue: 0.18, colour: '#c9a227' },
-  { name: 'Ferreira',   hue: 0.34, colour: '#0f766e' },
-  { name: 'Haugen',     hue: 0.70, colour: '#7c3aed' },
-  { name: 'Costa',      hue: 0.06, colour: '#b91c1c' },
-  { name: 'Weiss',      hue: 0.46, colour: '#0ea5e9' },
-  { name: 'Aldridge',   hue: 0.94, colour: '#db2777' },
-  { name: 'Petrov',     hue: 0.22, colour: '#ca8a04' },
+  { name: 'Ferrari',      colour: '#e8002d', hue: 0.52, model: 'ferrari-sf23.glb' },
+  { name: 'McLaren',      colour: '#ff8000', hue: 0.13, model: 'mclaren-mcl60.glb' },
+  { name: 'Aston Martin', colour: '#00594f', hue: 0.42, model: 'aston-martin-amr23.glb' },
+  { name: 'Alpine',       colour: '#0093cc', hue: 0.62, model: 'alpine-a523.glb' },
+  { name: 'AlphaTauri',   colour: '#2b4562', hue: 0.75, model: 'alphatauri-at04.glb' },
 ];
+
+/**
+ * Deal team cars to the grid so no brand repeats until every brand has been
+ * used. Six opponents get six different cars; the seventh starts a fresh
+ * shuffle, so twelve opponents are two of each.
+ */
+function dealTeams(count, seed = Math.random()) {
+  const order = [];
+  let pool = [];
+  let salt = seed;
+  for (let i = 0; i < count; i++) {
+    if (!pool.length) {
+      pool = TEAMS.map((_, k) => k);
+      for (let k = pool.length - 1; k > 0; k--) {          // Fisher-Yates
+        salt = (salt * 9301 + 49297) % 233280;
+        const j = Math.floor((salt / 233280) * (k + 1));
+        [pool[k], pool[j]] = [pool[j], pool[k]];
+      }
+    }
+    order.push(pool.shift());
+  }
+  return order;
+}
+
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -126,11 +149,21 @@ function buildPace(circuit, gripLevel) {
 
 
 export function createField(circuit, RAPIER, world, scene, options = {}) {
-  const count = clamp(options.count ?? 9, 0, TEAMS.length);
+  // Field size is limited by grid slots, not by how many teams exist: with
+  // more opponents than teams the extra cars reuse a brand (see dealTeams).
+  const count = Math.round(clamp(options.count ?? 9, 0, Math.max(1, (options.gridSlots?.length ?? 20) - 1)));
   const baseSkill = clamp(options.skill ?? 0.7, 0, 1);
   const gridSlots = options.gridSlots ?? [];
   const playerSlot = options.playerSlot ?? 0;
   const template = options.carAsset;
+  // One loaded model per team, keyed by file name. Missing ones fall back to a
+  // recoloured copy of the player's car so a failed download cannot empty the grid.
+  const models = options.rivalAssets ?? new Map();
+  const teamOrder = dealTeams(count, options.teamSeed);
+  // With more opponents than teams a brand appears twice; number them so the
+  // timing screen never shows two identical entries.
+  const teamCount = {}, teamSeen = {};
+  for (const t of teamOrder) { const n = TEAMS[t].name; teamCount[n] = (teamCount[n] ?? 0) + 1; teamSeen[n] = 0; }
 
   const root = new THREE.Group();
   root.name = 'AI field';
@@ -167,7 +200,7 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
   let contact = !!options.collisions;
 
   for (let i = 0; i < count; i++) {
-    const team = TEAMS[i % TEAMS.length];
+    const team = TEAMS[teamOrder[i] ?? (i % TEAMS.length)];
     const slot = slots[i] ?? gridSlots[0];
     const located = slot ? circuit.locate(slot.position.x, slot.position.z) : { distance: 0, offset: 0 };
 
@@ -178,7 +211,7 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     const skill = clamp(baseSkill, 0.30, 1.0);
     const aggression = clamp(0.45 + (Math.sin(i * 78.233) * 0.5 + 0.5) * 0.5, 0.25, 0.98);
 
-    const visual = buildCarVisual(template, team, options.renderer);
+    const visual = buildCarVisual(models.get(team.model) ?? template, team, options.renderer);
     if (visual.disposable) disposables.push(...visual.disposable);
     root.add(visual.root);
 
@@ -189,11 +222,12 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
 
     cars.push({
       id: i,
-      name: team.name,
+      name: teamCount[team.name] > 1 ? `${team.name} ${++teamSeen[team.name]}` : team.name,
       colour: team.colour,
       livery: team.hue,
       root: visual.root,
       wheels: visual.wheels,
+      sharedGeometry: !!visual.shared,
       skill,
       rank,
       aggression,
@@ -670,7 +704,10 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
   function dispose() {
     for (const car of cars) {
       removeBody(car);
-      car.root.traverse(object => { if (object.isMesh) object.geometry?.dispose?.(); });
+      // Cars built from a shared team model own neither geometry nor material.
+      if (!car.sharedGeometry) {
+        car.root.traverse(object => { if (object.isMesh) object.geometry?.dispose?.(); });
+      }
     }
     for (const item of disposables) item?.dispose?.();
     scene.remove(root);
@@ -689,7 +726,52 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
  * while masking by saturation, leaving tyres, carbon and the driver alone.
  * Geometry is shared between every car — only the material differs.
  */
+/**
+ * Copy a real team's car for one opponent.
+ *
+ * Geometry AND materials are shared with the loaded model — a Ferrari already
+ * has Ferrari paint baked in, so nothing is cloned or recoloured and ten cars
+ * cost one car's worth of GPU memory. Only the node hierarchy is rebuilt, so
+ * each car can steer and spin its own wheels.
+ */
+function cloneCar(template, team) {
+  const root = new THREE.Group();
+  root.name = `AI ${team.name}`;
+  const wheels = [];
+  const chassis = new THREE.Group();
+  root.add(chassis);
+
+  for (const child of template.chassis.children) {
+    if (!child.isMesh) continue;
+    const mesh = new THREE.Mesh(child.geometry, child.material);
+    mesh.castShadow = mesh.receiveShadow = true;
+    chassis.add(mesh);
+  }
+  for (const wheel of template.wheels) {
+    const steer = new THREE.Group();
+    const spin = new THREE.Group();
+    const fairing = new THREE.Group();
+    steer.position.copy(wheel.steer.position);
+    steer.add(spin, fairing);
+    chassis.add(steer);
+    for (const [from, to] of [[wheel.spin, spin], [wheel.fairing, fairing]]) {
+      for (const child of from?.children ?? []) {
+        if (!child.isMesh) continue;
+        const mesh = new THREE.Mesh(child.geometry, child.material);
+        mesh.castShadow = true;
+        to.add(mesh);
+      }
+    }
+    wheels.push({ steer, spin, fairing, front: wheel.index < 2 });
+  }
+  // Geometry and materials belong to the shared model, not to this car.
+  return { root, wheels, disposable: [], shared: true };
+}
+
 function buildCarVisual(template, team, renderer) {
+  // A real team car is used as-is; only a stand-in built from the player's
+  // Red Bull needs its livery hue-shifted to tell the cars apart.
+  if (template?.realLivery) return cloneCar(template, team);
   const root = new THREE.Group();
   root.name = `AI ${team.name}`;
   const wheels = [];

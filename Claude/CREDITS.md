@@ -37,6 +37,38 @@ respective owners. Attribution does not imply endorsement.
 
 ---
 
+## The opponents' cars — five 2023 F1 cars
+
+All by the same author as the RB19, **Redgrund** — <https://sketchfab.com/redgrund>,
+each licensed **CC BY 4.0** — <https://creativecommons.org/licenses/by/4.0/>.
+
+| Car | Source |
+| --- | --- |
+| Scuderia Ferrari SF23 | <https://sketchfab.com/3d-models/scuderia-ferrari-f1-sf23-2023-ecb0f812bc454331bbe721655b0780ec> |
+| McLaren MCL60 | <https://sketchfab.com/3d-models/mclaren-mcl60-f1-2023-8340e27c325345e4aa92a6a31cc34b1e> |
+| Aston Martin AMR23 | <https://sketchfab.com/3d-models/aston-martin-f1-amr23-2023-f6ba825a43b146a9b669934a4e1fd529> |
+| Alpine A523 | <https://sketchfab.com/3d-models/alpine-a523-2023-e97c2bb620d8461c92a03d007d63188c> |
+| AlphaTauri AT04 | <https://sketchfab.com/3d-models/alphatauri-at04-2023-a8003f86f7a24dfbad6cbc1c90069eaf> |
+
+Stored in `Claude/assets/cars/` (1.8–2.5 MB each).
+
+**Modifications made by APEX**, in addition to those listed for the RB19, which
+all five cars also receive:
+
+- Re-encoded with glTF-Transform 4.5: geometry simplified to ~22% of its
+  original triangle count, textures resized to 2048 px and re-encoded as WebP,
+  then meshopt-compressed. Each car went from 53–69 MB to under 2.5 MB.
+- Scale, orientation and wheel positions are **measured, not assumed**: the
+  car is turned to face +Z, scaled so its wheelbase matches the RB19's 3.54 m,
+  and its wheel centres are taken from the tyre contact patches. See
+  `loadRivalCar` in `Claude/render/car.js`.
+
+**Not included: Mercedes-AMG W14.** The same author's W14 is licensed
+CC BY-NC-ND 4.0, whose "NoDerivatives" term forbids distributing the modified
+copy this game requires. It is therefore not in this repository.
+
+---
+
 ## NFS Undercover DS — Highway Battle (the circuit)
 
 Author/uploader credited by the supplied GLB: **amogusstrikesback2** —
