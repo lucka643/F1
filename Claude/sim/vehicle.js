@@ -396,7 +396,7 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
 
     // Anti-roll bars couple the two wheels on each axle: the more the car
     // rolls, the more load is pushed back onto the inside wheel.
-    const rollScale = suspensionOn ? 1 : 3;
+    const rollScale = suspensionOn ? 1 : 2;
     applyAntiRoll(suspensionForces, 0, 1, ANTIROLL_FRONT * rollScale);
     applyAntiRoll(suspensionForces, 2, 3, ANTIROLL_REAR * rollScale);
 
@@ -607,9 +607,14 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
   function applyAntiRoll(forces, leftIndex, rightIndex, rate) {
     const travelLeft = REST_LENGTH - wheels[leftIndex].suspensionLength;
     const travelRight = REST_LENGTH - wheels[rightIndex].suspensionLength;
+    // An anti-roll bar pushes UP on the more compressed wheel and eases off the
+    // other, resisting the lean. This was inverted: it took force away from the
+    // compressed side, so any roll fed on itself. Soft enough to hide under the
+    // springs with suspension on; tripled for "suspension off" it rolled the
+    // car onto its side.
     const transfer = (travelLeft - travelRight) * rate;
-    forces[leftIndex] = Math.max(0, forces[leftIndex] - transfer);
-    forces[rightIndex] = Math.max(0, forces[rightIndex] + transfer);
+    forces[leftIndex] = Math.max(0, forces[leftIndex] + transfer);
+    forces[rightIndex] = Math.max(0, forces[rightIndex] - transfer);
   }
 
   function readBody() {
