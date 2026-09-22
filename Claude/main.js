@@ -346,7 +346,9 @@ function startSession() {
 
   // Grid slot 0 is pole; the player starts from the back in a race so there is
   // something to actually do, and on an empty track otherwise.
-  const slotIndex = opponents > 0 ? Math.min(opponents, game.track.gridSlots.length - 1) : 0;
+  // Start mid-grid: half the field ahead, half behind. Starting at the back
+  // put the whole field up to ~70 m ahead before the lights went out.
+  const slotIndex = opponents > 0 ? Math.min(Math.floor(opponents / 2), game.track.gridSlots.length - 1) : 0;
   const slot = game.track.gridSlots[slotIndex] ?? game.track.start;
   game.vehicle.reset(slot);
 
@@ -358,6 +360,7 @@ function startSession() {
       playerSlot: slotIndex,
       carAsset: game.car,
       renderer: game.renderer,
+      gripLevel: settings.gripLevel,     // the field keeps pace with the player's car
     });
     for (const rival of game.field.cars) game.pipeline.registerDynamic(rival.root);
   }

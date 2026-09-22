@@ -38,6 +38,74 @@ const TEAMS = [
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+/* ───────────────────────── performance model ─────────────────────────
+ * Measured from the player's own car (sim/vehicle.js) on flat asphalt, so the
+ * AI accelerates, brakes, corners and tops out exactly as the player's car
+ * does. Re-measure if the vehicle model changes.
+ *
+ *   top speed 311 km/h (336 with DRS) · 0-100 5.3 s · 0-200 9.0 s
+ */
+const ACCEL = [[0, 4.0], [5, 4.35], [15, 5.56], [25, 6.67], [35, 7.14], [45, 7.14], [55, 8.33], [65, 6.67], [75, 3.45], [86.4, 0]];
+const ACCEL_DRS = [[0, 4.0], [5, 4.35], [15, 5.56], [25, 6.67], [35, 6.25], [45, 7.14], [55, 7.14], [65, 7.69], [75, 5.0], [85, 2.08], [93.3, 0]];
+const BRAKE = [[0, 10], [15, 11.76], [25, 15.38], [35, 18.18], [45, 25], [55, 28.57], [65, 33.33], [75, 40], [95, 45]];
+// Steady-state lateral grip in g at grip 1.0: mechanical grip plus downforce
+// rising with v^2. Fits the measured 0.95/1.68/3.63/6.39 g at 54/108/180/252 km/h.
+const GRIP_G0 = 0.71;
+const GRIP_K = 0.00108;
+const TOP_SPEED = 86.4;
+const TOP_SPEED_DRS = 93.3;
+const DRS_CURVATURE = 0.0035;           // same threshold the player's DRS uses
+const RIDE_HEIGHT = 0.585;              // car origin above the road, as the player's car rests
+
+function table(t, v) {
+  if (v <= t[0][0]) return t[0][1];
+  for (let i = 1; i < t.length; i++) {
+    if (v <= t[i][0]) {
+      const [v0, a0] = t[i - 1], [v1, a1] = t[i];
+      return a0 + (a1 - a0) * (v - v0) / (v1 - v0);
+    }
+  }
+  return t[t.length - 1][1];
+}
+
+/**
+ * The fastest speed the player's car could carry at every point of the racing
+ * line: cornering limit from the measured grip curve, then a backward pass for
+ * braking and a forward pass for acceleration, both from the measured tables.
+ * Scaled by the player's grip setting so the field keeps pace with it.
+ */
+function buildPace(circuit, gripLevel) {
+  const line = circuit.racingLine;
+  const n = line.length;
+  const gripScale = 0.5 + 0.5 * gripLevel;
+  const g = 9.81;
+  const v = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const r = line[i].radius;
+    const drs = Math.abs(line[i].curvature) < DRS_CURVATURE;
+    const cap = drs ? TOP_SPEED_DRS : TOP_SPEED;
+    if (!Number.isFinite(r)) { v[i] = cap; continue; }
+    const denom = 1 - gripScale * GRIP_K * g * r;
+    v[i] = denom <= 0.02 ? cap : Math.min(cap, Math.sqrt(gripScale * GRIP_G0 * g * r / denom));
+  }
+  const seg = i => Math.hypot(line[(i + 1) % n].x - line[i].x, line[(i + 1) % n].z - line[i].z);
+  for (let pass = 0; pass < 3; pass++) {
+    for (let k = 2 * n; k > 0; k--) {                     // braking: be slow enough in time
+      const i = k % n, j = (k - 1 + n) % n;
+      const limit = Math.sqrt(v[i] * v[i] + 2 * table(BRAKE, v[i]) * seg(j));
+      if (v[j] > limit) v[j] = limit;
+    }
+    for (let k = 0; k < 2 * n; k++) {                     // traction/power: cannot out-accelerate the car
+      const i = k % n, j = (k + 1) % n;
+      const drs = Math.abs(line[i].curvature) < DRS_CURVATURE;
+      const limit = Math.sqrt(v[i] * v[i] + 2 * table(drs ? ACCEL_DRS : ACCEL, v[i]) * seg(i));
+      if (v[j] > limit) v[j] = limit;
+    }
+  }
+  return v;
+}
+
+
 export function createField(circuit, RAPIER, world, scene, options = {}) {
   const count = clamp(options.count ?? 9, 0, TEAMS.length);
   const baseSkill = clamp(options.skill ?? 0.7, 0, 1);
@@ -55,6 +123,23 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
   // Grid slots are assigned to the AI in order, skipping the player's.
   const slots = gridSlots.filter((_, i) => i !== playerSlot);
 
+  const pace = buildPace(circuit, options.gripLevel ?? 1);
+  const paceAt = lineDistance => {
+    const n = pace.length;
+    const f = (((lineDistance % circuit.racingLineLength) + circuit.racingLineLength) % circuit.racingLineLength)
+      / circuit.racingLineLength * n;
+    const i = Math.floor(f) % n, t = f - Math.floor(f);
+    return pace[i] + (pace[(i + 1) % n] - pace[i]) * t;
+  };
+  // Race progress in metres along the CENTRELINE, measured the same way for
+  // every car and for the player: signed start position (negative = behind
+  // the line) plus distance covered since. The old code mixed an AI lap
+  // counter with the player's completed-lap count and compared racing-line
+  // distance against centreline distance, which is why passing a car could
+  // leave you shown behind it.
+  const signedStart = d => (d > circuit.lapLength / 2 ? d - circuit.lapLength : d);
+  const player = { progress: null, last: null };
+
   for (let i = 0; i < count; i++) {
     const team = TEAMS[i % TEAMS.length];
     const slot = slots[i] ?? gridSlots[0];
@@ -71,6 +156,11 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     if (visual.disposable) disposables.push(...visual.disposable);
     root.add(visual.root);
 
+    // Where on the racing line this grid slot sits, and how far off the line.
+    const lineDistance = located.distance / circuit.lapLength * circuit.racingLineLength;
+    const onLine = circuit.lineAt(lineDistance);
+    const startOffset = located.offset - onLine.offset;
+
     cars.push({
       id: i,
       name: team.name,
@@ -80,15 +170,17 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       wheels: visual.wheels,
       skill,
       aggression,
-      lapDistance: located.distance,
-      offset: located.offset,
-      targetOffset: located.offset,
+      // How close to the car's measured limit this driver commits. At skill 1
+      // they drive at the player's car's full measured pace.
+      commit: 0.9 + 0.1 * skill,
+      lineDistance,                 // along the racing line: drives the motion
+      lapDistance: located.distance, // along the centreline: comparable with the player
+      offset: startOffset,          // metres left of the racing line
+      targetOffset: startOffset,
       speed: 0,
-      lap: 0,
-      totalDistance: 0,
+      progress: signedStart(located.distance),
       spinAngle: 0,
       bodyRoll: 0,
-      lastDistance: located.distance,
       state: { speedKmh: 0, rpm: 6000 },
     });
   }
@@ -96,113 +188,157 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
   const forwardVector = new THREE.Vector3();
   const quaternion = new THREE.Quaternion();
 
+  const up = new THREE.Vector3(0, 1, 0);
+  const across = new THREE.Vector3(1, 0, 0);
+  const forwardAxis = new THREE.Vector3(0, 0, 1);
+  const yawQuat = new THREE.Quaternion();
+  const pitchQuat = new THREE.Quaternion();
+  const rollQuat = new THREE.Quaternion();
+
+  /** Advance the player's progress the same way the AI's is measured. */
+  function trackPlayer(playerState) {
+    if (!playerState) return;
+    const d = playerState.lapDistance ?? 0;
+    if (player.progress === null) { player.progress = signedStart(d); player.last = d; return; }
+    let delta = d - player.last;
+    if (delta < -circuit.lapLength / 2) delta += circuit.lapLength;
+    if (delta > circuit.lapLength / 2) delta -= circuit.lapLength;
+    if (Math.abs(delta) < 80) player.progress += delta;     // ignore teleports (respawns)
+    player.last = d;
+  }
+
   /**
-   * One AI step. Everything is in corridor space until the final transform.
+   * One AI step.
+   *
+   * Motion is along the racing line (`lineDistance`), with a lateral `offset`
+   * from it. Race progress is measured separately along the centreline, from
+   * where the car actually ends up, so it is directly comparable with the
+   * player's. Every value is finite by construction: the previous version read
+   * a field the racing-line lookup never returned, produced NaN the moment one
+   * car closed on another, and the car vanished from the screen for good.
    */
   function step(dt, playerState) {
     if (!cars.length) return;
-    const step = Math.min(dt, 0.05);
+    const h = Math.min(dt, 0.05);
+    trackPlayer(playerState);
 
-    // Where is everyone, including the player, so cars can react to each other.
-    const traffic = cars.map(car => ({ car, distance: car.lapDistance, offset: car.offset }));
-    if (playerState) {
-      traffic.push({ car: null, distance: playerState.lapDistance ?? 0, offset: playerState.lateralOffset ?? 0 });
+    // Everyone on track, in centreline progress/offset terms.
+    const traffic = cars.map(car => ({ car, progress: car.progress, offset: car.centreOffset ?? 0, speed: car.speed }));
+    if (playerState && player.progress !== null) {
+      traffic.push({ car: null, progress: player.progress, offset: playerState.lateralOffset ?? 0,
+        speed: Math.abs(playerState.speed ?? 0) });
     }
 
     for (const car of cars) {
-      // --- target speed from the solved racing line, scaled by skill ---
-      const lookaheadDistance = 12 + car.speed * 1.35;
-      const here = circuit.lineAt(car.lapDistance);
-      const ahead = circuit.lineAt(car.lapDistance + lookaheadDistance);
-      const farther = circuit.lineAt(car.lapDistance + lookaheadDistance * 2.1);
+      const here = circuit.lineAt(car.lineDistance);
 
-      // Brake for the slowest thing within the lookahead, not just the point
-      // directly ahead — that is what produces a realistic braking point.
-      const limit = Math.min(here.targetSpeed, ahead.targetSpeed, farther.targetSpeed);
-      let target = limit * (0.80 + car.skill * 0.22);
+      // --- speed: the measured pace a quarter-second ahead, so braking starts in time ---
+      let target = paceAt(car.lineDistance + car.speed * 0.25) * car.commit;
 
       // --- traffic ---
-      let blocked = false;
-      let closingOn = null;
+      const myOffset = here.offset + car.offset;             // centreline-relative
+      let closingOn = null, closest = Infinity;
       for (const other of traffic) {
         if (other.car === car) continue;
-        const gap = circuit.gapAlong(car.lapDistance, other.distance);
-        if (gap < 0 || gap > 42) continue;
-        const lateral = Math.abs(other.offset - car.offset);
-        if (lateral < 2.6) {
-          blocked = true;
-          closingOn = other;
-          // Slow to match if we are right behind, unless we can get alongside.
-          const urgency = clamp(1 - gap / 42, 0, 1);
-          const otherSpeed = other.car ? other.car.speed : Math.abs(playerState?.speed ?? target);
-          target = Math.min(target, otherSpeed + (1 - urgency) * 9 + car.aggression * 4);
-        }
+        const gap = other.progress - car.progress;
+        if (gap <= 0 || gap > 40) continue;
+        if (Math.abs(other.offset - myOffset) >= 2.4) continue;
+        if (gap < closest) { closest = gap; closingOn = other; }
+      }
+      if (closingOn) {
+        // Do not drive into the back of whoever is ahead, but only lift if we
+        // are genuinely closing — a slower car ahead is a chance to pass.
+        const urgency = clamp(1 - closest / 40, 0, 1);
+        target = Math.min(target, closingOn.speed + (1 - urgency) * 10 + car.aggression * 3);
       }
 
-      // --- longitudinal dynamics ---
-      // Real limits: an F1 car brakes far harder than it accelerates, and
-      // acceleration falls away with speed as drag builds.
-      const accelerationLimit = (11.5 - Math.min(car.speed * 0.028, 7.5)) * (0.85 + car.skill * 0.2);
-      const brakingLimit = 38 * (0.8 + car.skill * 0.25);
-      const error = target - car.speed;
-      const acceleration = error > 0
-        ? Math.min(error / Math.max(step, 1e-3), accelerationLimit)
-        : Math.max(error / Math.max(step, 1e-3), -brakingLimit);
-      car.speed = Math.max(0, car.speed + acceleration * step);
-
-      // --- lateral: follow the racing line, move off it to pass or defend ---
-      let desiredOffset = ahead.offset ?? 0;
-      if (blocked && closingOn) {
-        const gap = circuit.gapAlong(car.lapDistance, closingOn.distance);
-        if (gap < 26 && car.speed > 12) {
-          // Pick whichever side has more room and commit proportionally to
-          // aggression. Timid drivers just sit behind.
-          const sample = circuit.centreline[circuit.locate(here.x, here.z).index];
-          const room = Math.max(3, (sample?.width ?? 10) / 2 - 1.4);
-          const side = closingOn.offset >= 0 ? -1 : 1;
-          desiredOffset = clamp(closingOn.offset + side * 2.9, -room, room);
-          desiredOffset = ahead.offset + (desiredOffset - ahead.offset) * car.aggression;
-        }
+      // --- longitudinal: the player's measured acceleration and braking ---
+      const drs = Math.abs(here.curvature) < DRS_CURVATURE;
+      if (target > car.speed) {
+        car.speed = Math.min(target, car.speed + table(drs ? ACCEL_DRS : ACCEL, car.speed) * h);
+      } else {
+        car.speed = Math.max(target, car.speed - table(BRAKE, car.speed) * h);
       }
-      car.targetOffset += (desiredOffset - car.targetOffset) * Math.min(1, step * 3.2);
-      car.offset += (car.targetOffset - car.offset) * Math.min(1, step * 2.6);
+      car.speed = clamp(car.speed, 0, drs ? TOP_SPEED_DRS : TOP_SPEED);
 
-      // --- advance around the lap ---
-      const travelled = car.speed * step;
-      const previous = car.lapDistance;
-      car.lapDistance = (car.lapDistance + travelled) % circuit.lapLength;
-      car.totalDistance += travelled;
-      if (car.lapDistance < previous - circuit.lapLength * 0.5) car.lap++;
+      // --- lateral: stay on the line, step aside to pass ---
+      let desired = 0;
+      if (closingOn && closest < 28 && car.speed > 10) {
+        // Go round on whichever side has more road.
+        const room = here.halfWidth - 1.2;
+        const spaceLeft = room - closingOn.offset, spaceRight = room + closingOn.offset;
+        const side = spaceLeft >= spaceRight ? 1 : -1;
+        const wantCentre = closingOn.offset + side * 2.8;
+        desired = (wantCentre - here.offset) * car.aggression;
+      }
+      car.targetOffset += (desired - car.targetOffset) * Math.min(1, h * 3.0);
+      car.offset += (car.targetOffset - car.offset) * Math.min(1, h * 2.4);
+      // Never leave the tarmac: keep the centreline offset inside the corridor.
+      const limit = Math.max(0, here.halfWidth - 1.1);
+      car.offset = clamp(here.offset + car.offset, -limit, limit) - here.offset;
+      if (!Number.isFinite(car.offset)) car.offset = 0;
+      if (!Number.isFinite(car.targetOffset)) car.targetOffset = 0;
 
-      // --- place the visual ---
-      const point = circuit.lineAt(car.lapDistance);
-      const located = circuit.locate(point.x, point.z);
-      const sample = circuit.centreline[located.index];
-      const lateral = car.offset - (point.offset ?? 0);
-      const x = point.x + (sample?.nx ?? 0) * lateral;
-      const z = point.z + (sample?.nz ?? 0) * lateral;
-      const ground = circuit.heightAt(x, z, point.y);
-      car.root.position.set(x, (ground ?? point.y) + 0.12, z);
+      // --- advance ---
+      car.lineDistance = (car.lineDistance + car.speed * h) % circuit.racingLineLength;
 
-      const yaw = Math.atan2(point.tx, point.tz);
-      // Lean into the corner a little; it reads as load even without physics.
-      const roll = clamp(-point.curvature * car.speed * car.speed * 0.0009, -0.09, 0.09);
-      car.bodyRoll += (roll - car.bodyRoll) * Math.min(1, step * 4);
-      quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-      const rollQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), car.bodyRoll);
-      car.root.quaternion.copy(quaternion).multiply(rollQuat);
+      // --- place the car: on the road, wheels on the surface ---
+      const point = circuit.lineAt(car.lineDistance);
+      const nx = -point.tz, nz = point.tx;                     // left of the direction of travel
+      // The corridor width is smoothed, and through the narrow two-level
+      // interchange even the racing line's interpolated path can clip the edge
+      // of the single-lane deck. So check the real surface and, if the car would
+      // be off it, move to the nearest offset that is actually on tarmac.
+      if (circuit.heightAt(point.x + nx * car.offset, point.z + nz * car.offset, point.y) === null) {
+        let best = null;
+        for (let step = 1; step <= 24 && best === null; step++) {
+          for (const sign of [-1, 1]) {
+            const candidate = car.offset + sign * step * 0.25;
+            if (circuit.heightAt(point.x + nx * candidate, point.z + nz * candidate, point.y) !== null) {
+              // Step one notch further in, so the car's width is on the road too.
+              best = candidate + sign * 0.25;
+              break;
+            }
+          }
+        }
+        if (best !== null) { car.offset = best; car.targetOffset = best; }
+      }
+      const x = point.x + nx * car.offset;
+      const z = point.z + nz * car.offset;
+      const ground = circuit.heightAt(x, z, point.y) ?? point.y;
+      car.root.position.set(x, ground + RIDE_HEIGHT, z);
 
-      // Wheels.
-      car.spinAngle = (car.spinAngle + (car.speed / 0.375) * step) % (Math.PI * 2);
-      const steer = clamp(point.curvature * 90, -0.35, 0.35);
+      // Pitch with the road so the nose and tail do not dig into slopes.
+      const behind = circuit.lineAt(car.lineDistance - 3), aheadP = circuit.lineAt(car.lineDistance + 3);
+      const pitch = Math.atan2(aheadP.y - behind.y, 6);
+      const roll = clamp(-point.curvature * car.speed * car.speed * 0.0009, -0.08, 0.08);
+      car.bodyRoll += (roll - car.bodyRoll) * Math.min(1, h * 4);
+      yawQuat.setFromAxisAngle(up, Math.atan2(point.tx, point.tz));
+      pitchQuat.setFromAxisAngle(across, -pitch);
+      rollQuat.setFromAxisAngle(forwardAxis, car.bodyRoll);
+      car.root.quaternion.copy(yawQuat).multiply(pitchQuat).multiply(rollQuat);
+
+      // --- progress, from where the car actually is ---
+      const located = circuit.locate(x, z);
+      let delta = located.distance - car.lapDistance;
+      if (delta < -circuit.lapLength / 2) delta += circuit.lapLength;
+      if (delta > circuit.lapLength / 2) delta -= circuit.lapLength;
+      if (Math.abs(delta) < 80) car.progress += delta;
+      car.lapDistance = located.distance;
+      car.centreOffset = located.offset;
+
+      // --- wheels ---
+      car.spinAngle = (car.spinAngle + (car.speed / 0.375) * h) % (Math.PI * 2);
+      // Left turns have negative curvature here, and a positive Y rotation
+      // turns the wheel left — so the sign is flipped, as for the player's car.
+      const steerAngle = clamp(-point.curvature * 3.54, -0.35, 0.35);
       for (const wheel of car.wheels) {
         wheel.spin.rotation.x = car.spinAngle;
-        if (wheel.front) wheel.steer.rotation.y = steer;
+        if (wheel.front) wheel.steer.rotation.y = steerAngle;
       }
 
       car.state.speedKmh = car.speed * 3.6;
-      car.state.rpm = 5000 + Math.min(1, car.speed / 90) * 9000;
-      car.lastDistance = previous;
+      car.state.rpm = 5000 + Math.min(1, car.speed / TOP_SPEED) * 9000;
     }
   }
 
@@ -211,39 +347,26 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
    * position within the lap — and gaps are expressed in seconds at the
    * player's current pace, which is how a real timing screen reads.
    */
-  function classification(playerState, playerLap = 0) {
+  function classification(playerState) {
+    const L = circuit.lapLength;
     const entries = cars.map(car => ({
-      name: car.name,
-      isPlayer: false,
-      lap: car.lap,
-      progress: car.lap * circuit.lapLength + car.lapDistance,
-      speed: car.speed,
-      best: car.bestLap ?? null,
-      colour: car.colour,
+      name: car.name, isPlayer: false, colour: car.colour,
+      progress: car.progress, speed: car.speed, best: null,
+      lap: Math.max(1, Math.floor(car.progress / L) + 1),
     }));
-    if (playerState) {
+    if (playerState && player.progress !== null) {
       entries.push({
-        name: 'You',
-        isPlayer: true,
-        lap: playerLap,
-        progress: playerLap * circuit.lapLength + (playerState.lapDistance ?? 0),
-        speed: Math.abs(playerState.speed ?? 0),
-        best: null,
-        colour: '#ffffff',
+        name: 'You', isPlayer: true, colour: '#ffffff',
+        progress: player.progress, speed: Math.abs(playerState.speed ?? 0), best: null,
+        lap: Math.max(1, Math.floor(player.progress / L) + 1),
       });
     }
     entries.sort((a, b) => b.progress - a.progress);
     const leader = entries[0];
+    const me = entries.find(e => e.isPlayer);
     for (const entry of entries) {
-      const gapMetres = leader.progress - entry.progress;
-      const pace = Math.max(entry.speed, 20);
-      entry.gapToLeader = gapMetres / pace;
-    }
-    const player = entries.find(e => e.isPlayer);
-    for (const entry of entries) {
-      entry.gapToPlayer = player
-        ? Math.abs(entry.progress - player.progress) / Math.max(entry.speed, 20)
-        : null;
+      entry.gapToLeader = (leader.progress - entry.progress) / Math.max(entry.speed, 20);
+      entry.gapToPlayer = me ? Math.abs(entry.progress - me.progress) / Math.max(entry.speed, 20) : null;
     }
     return entries;
   }
@@ -254,6 +377,7 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     cars.forEach((car, i) => {
       const spread = (i / Math.max(1, cars.length - 1)) - 0.5;
       car.skill = clamp(skill - spread * 0.18, 0.3, 1);
+      car.commit = 0.9 + 0.1 * car.skill;
     });
   }
 
@@ -266,7 +390,8 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     cars.length = 0;
   }
 
-  return { cars, root, step, classification, setCount, setSkill, dispose };
+  return { cars, root, step, classification, setCount, setSkill, dispose,
+    get playerProgress() { return player.progress; } };
 }
 
 /**
@@ -318,16 +443,19 @@ function buildCarVisual(template, team, renderer) {
   for (const wheel of template.wheels) {
     const steer = new THREE.Group();
     const spin = new THREE.Group();
+    const fairing = new THREE.Group();          // covers and ducts: steer, never spin
     steer.position.copy(wheel.steer.position);
-    steer.add(spin);
+    steer.add(spin, fairing);
     chassis.add(steer);
-    for (const child of wheel.spin.children) {
-      if (!child.isMesh) continue;
-      const mesh = new THREE.Mesh(child.geometry, material);
-      mesh.castShadow = true;
-      spin.add(mesh);
+    for (const [from, to] of [[wheel.spin, spin], [wheel.fairing, fairing]]) {
+      for (const child of from?.children ?? []) {
+        if (!child.isMesh) continue;
+        const mesh = new THREE.Mesh(child.geometry, material);
+        mesh.castShadow = true;
+        to.add(mesh);
+      }
     }
-    wheels.push({ steer, spin, front: wheel.index < 2 });
+    wheels.push({ steer, spin, fairing, front: wheel.index < 2 });
   }
 
   return { root, wheels, disposable };

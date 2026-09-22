@@ -529,6 +529,13 @@ export class Circuit {
       curvature: a.curvature + (b.curvature - a.curvature) * t,
       targetSpeed: a.targetSpeed + (b.targetSpeed - a.targetSpeed) * t,
       distance: d,
+      index: i,
+      // The racing line is solved 1:1 against the centreline samples, so the
+      // line's lateral offset from the centreline and the corridor width at
+      // this point can be read straight off the matching samples. The AI needs
+      // both to place a car beside the line without leaving the tarmac.
+      offset: (a.offset ?? 0) + ((b.offset ?? 0) - (a.offset ?? 0)) * t,
+      halfWidth: (this.centreline[i].width + (this.centreline[(i + 1) % n].width - this.centreline[i].width) * t) / 2,
     };
   }
 
