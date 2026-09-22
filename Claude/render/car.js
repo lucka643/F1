@@ -94,6 +94,35 @@ function dequantize(geometry) {
 }
 
 /**
+ * Is this triangle aero furniture that belongs to the wheel corner — a cover,
+ * brake duct or over-tyre winglet — rather than bodywork that just happens to
+ * sit near the wheel?
+ *
+ * The claim box has to be generous to catch the covers, but a generous box
+ * also swallows the diffuser strakes and rear-wing endplates beside the rear
+ * wheels and the front-wing endplates ahead of the fronts. Those are chassis:
+ * parented to the corner, they rode up and down with the suspension and hung
+ * visibly below the car. So corner furniture is confined to the space the
+ * wheel actually occupies: no further fore or aft than just past the tyre,
+ * not far inboard of it, and not below the hub.
+ */
+function isCornerFurniture(tri, position, centre) {
+  const outboardSign = Math.sign(centre.x) || 1;
+  let lateral = 0, dy = 0, dz = 0;
+  for (const id of tri) {
+    lateral += (position.getX(id) - centre.x) * outboardSign;   // + outboard, - inboard
+    dy += position.getY(id) - centre.y;
+    dz += position.getZ(id) - centre.z;
+  }
+  lateral /= 3; dy /= 3; dz /= 3;
+  return Math.abs(dz) <= TYRE_RADIUS + 0.09     // not the wing endplates fore/aft
+      && lateral >= -0.26                        // not the diffuser/floor inboard
+      && lateral <= 0.40
+      && dy >= -0.12                             // nothing hanging below the hub
+      && dy <= 0.62;
+}
+
+/**
  * Rebuild a geometry from a subset of its triangles, compacting the vertex
  * arrays so each wheel does not carry a copy of the whole car's attributes.
  */
@@ -370,7 +399,13 @@ export async function loadCar(renderer, { quality = 'standard', onProgress } = {
         radial /= 3;
         axial /= 3;
         const halfWidth = w < 2 ? SPIN_HALF_WIDTH.front : SPIN_HALF_WIDTH.rear;
-        bucket = (radial <= SPIN_RADIUS && axial <= halfWidth) ? w + 1 : w + 5;
+        if (radial <= SPIN_RADIUS && axial <= halfWidth) {
+          bucket = w + 1;                                   // tyre and rim: spins
+        } else if (isCornerFurniture(tri, position, c)) {
+          bucket = w + 5;                                   // cover/duct/winglet: steers only
+        } else {
+          bucket = 0;                                       // bodywork that merely sits nearby
+        }
         break;
       }
       buckets[bucket].push(...tri);
