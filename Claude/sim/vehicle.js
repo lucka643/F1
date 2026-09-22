@@ -105,6 +105,22 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
     ...options.setup,
   };
 
+  // Ceilings on what a single physics step may do to the car in a collision.
+  // Ceilings on what one physics step may do to the car in a collision.
+  // Sideways and forwards, 16 m/s in 1/120 s is a brutal but real impact; the
+  // solver was reaching 88 m/s (320 km/h) in a single step when a car buried
+  // itself in a rival at racing speed. Upwards is held far tighter: nothing in
+  // a car-to-car accident should throw a car into the air, and being launched
+  // off the wedge of another car's collision box is what sent players flying.
+  const MAX_IMPACT_SPEED_CHANGE = 16;   // m/s per 1/120 s step, horizontal
+  const MAX_IMPACT_LIFT = 1.2;          // m/s per 1/120 s step, upward
+  const MAX_IMPACT_SPIN_CHANGE = 1.5;   // rad/s per 1/120 s step
+  // Absolute ceilings, whatever the solver decides. The car's own engine tops
+  // out at 93 m/s, and a spinning F1 car turns at about 3 rad/s, so anything
+  // past these came from a collision going wrong rather than from driving.
+  const SPEED_CEILING = 105;            // m/s (378 km/h)
+  const SPIN_CEILING = 7;               // rad/s
+
   /* ---- rigid body ---- */
   const body = world.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic()
@@ -567,7 +583,22 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
       wheel.steerAngle = state.steerAngle * (inner ? 1.12 : 0.9);
     }
 
+    // What the car was doing before the solver ran, so a contact that tries to
+    // launch it can be caught below.
+    const beforeV = body.linvel(), beforeW = body.angvel();
+
     world.step();
+
+    // Crash limiter. Hitting another car at 300 km/h can leave the two shapes
+    // deeply overlapped in a single 1/120 s step, and the solver then pushes
+    // them apart hard enough to throw the car across the circuit. Nothing real
+    // — tyres, wings, a wall — changes a car's velocity by more than about
+    // 10 m/s or its rotation by more than 4 rad/s in 8 milliseconds, so a jump
+    // beyond that is the solver, not the accident, and is scaled back to a
+    // heavy but survivable impact.
+    limitImpulse(beforeV, MAX_IMPACT_SPEED_CHANGE * dt * 120, MAX_IMPACT_LIFT * dt * 120,
+      beforeW, MAX_IMPACT_SPIN_CHANGE * dt * 120);
+
     readBody();
 
     /* --- engine speed from the driven wheels --- */
@@ -663,6 +694,43 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
     const transfer = (travelLeft - travelRight) * rate;
     forces[leftIndex] = Math.max(0, forces[leftIndex] + transfer);
     forces[rightIndex] = Math.max(0, forces[rightIndex] - transfer);
+  }
+
+  /** Clamp how much one solver step may change the body's motion. */
+  function limitImpulse(beforeV, maxDeltaV, maxLift, beforeW, maxDeltaW) {
+    const v = body.linvel();
+    let dvx = v.x - beforeV.x, dvy = v.y - beforeV.y, dvz = v.z - beforeV.z;
+    let changed = false;
+    const horizontal = Math.hypot(dvx, dvz);
+    if (horizontal > maxDeltaV) {
+      const k = maxDeltaV / horizontal;
+      dvx *= k; dvz *= k;
+      changed = true;
+    }
+    if (dvy > maxLift) { dvy = maxLift; changed = true; }      // only upward is capped; falling is free
+    if (changed) {
+      body.setLinvel({ x: beforeV.x + dvx, y: beforeV.y + dvy, z: beforeV.z + dvz }, true);
+    }
+    // Hard ceiling, whatever happened above.
+    const now = body.linvel();
+    const speed = Math.hypot(now.x, now.y, now.z);
+    if (speed > SPEED_CEILING) {
+      const k = SPEED_CEILING / speed;
+      body.setLinvel({ x: now.x * k, y: now.y * k, z: now.z * k }, true);
+    }
+    const w = body.angvel();
+    const dwx = w.x - beforeW.x, dwy = w.y - beforeW.y, dwz = w.z - beforeW.z;
+    const dw = Math.hypot(dwx, dwy, dwz);
+    if (dw > maxDeltaW) {
+      const k = maxDeltaW / dw;
+      body.setAngvel({ x: beforeW.x + dwx * k, y: beforeW.y + dwy * k, z: beforeW.z + dwz * k }, true);
+    }
+    const spinning = body.angvel();
+    const spin = Math.hypot(spinning.x, spinning.y, spinning.z);
+    if (spin > SPIN_CEILING) {
+      const k = SPIN_CEILING / spin;
+      body.setAngvel({ x: spinning.x * k, y: spinning.y * k, z: spinning.z * k }, true);
+    }
   }
 
   function readBody() {

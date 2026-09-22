@@ -284,9 +284,12 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
    * a field the racing-line lookup never returned, produced NaN the moment one
    * car closed on another, and the car vanished from the screen for good.
    */
+  let lastStep = 1 / 120;
+
   function step(dt, playerState) {
     if (!cars.length) return;
     const h = Math.min(dt, 0.05);
+    lastStep = Math.max(h, 1e-3);
     trackPlayer(playerState);
 
     // Everyone on track, in centreline progress/offset terms.
@@ -432,7 +435,16 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
    * holds the car behind back and takes away its excess speed — it has to
    * brake, it cannot go through.
    */
+  // How far a contact correction may move a car in one step. A car that is
+  // teleported out of an overlap looks, to the physics engine, like one moving
+  // at hundreds of km/h, and hitting the player with that launched them across
+  // the circuit. Corrections are fed in at walking pace instead, so the worst
+  // case is a car easing out of an overlap over a few frames.
+  const MAX_CORRECTION = 1.5;            // metres per second
+  let correctionLimit = 0.05;
+
   function resolveContacts(playerState) {
+    correctionLimit = Math.max(0.002, MAX_CORRECTION * lastStep);
     let px = 0, pz = 0, pSpeed = 0, hasPlayer = false;
     if (playerState?.position && player.progress !== null) {
       px = playerState.position.x; pz = playerState.position.z;
@@ -462,11 +474,12 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     if (penLong <= 0 || penLat <= 0) return;
     if (penLat < penLong && penLat < 1.2) {
       const side = lateral >= 0 ? 1 : -1;
-      a.offset -= side * penLat / 2; b.offset += side * penLat / 2;
+      const push = Math.min(penLat / 2, correctionLimit);
+      a.offset -= side * push; b.offset += side * push;
       keepOnRoad(a); keepOnRoad(b);
     } else {
       const [behind, ahead] = along >= 0 ? [a, b] : [b, a];
-      behind.lineDistance = wrap(behind.lineDistance - penLong);
+      behind.lineDistance = wrap(behind.lineDistance - Math.min(penLong, correctionLimit));
       behind.speed = Math.min(behind.speed, Math.max(ahead.speed, crawl(behind)));
     }
     pose(a); pose(b);
@@ -481,11 +494,12 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     const penLat = CONTACT_LAT + 0.3 - Math.abs(lateral);   // extra room: the player's car is real
     if (penLong <= 0 || penLat <= 0) return;
     if (penLat < penLong && penLat < 1.2) {
-      car.offset -= (lateral >= 0 ? 1 : -1) * penLat;      // the AI gives way; the player is solid
+      // The AI gives way; the player is solid.
+      car.offset -= (lateral >= 0 ? 1 : -1) * Math.min(penLat, correctionLimit);
       keepOnRoad(car);
     } else if (along > 0) {
       // The player is ahead: the AI holds back behind them.
-      car.lineDistance = wrap(car.lineDistance - penLong);
+      car.lineDistance = wrap(car.lineDistance - Math.min(penLong, correctionLimit));
       car.speed = Math.min(car.speed, Math.max(pSpeed, crawl(car)));
     }
     // The player running into the back of an AI is handled by the physics
@@ -649,10 +663,14 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     if (!canCollide || car.body) return;
     const p = car.root.position, q = car.root.quaternion;
     car.body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased()
-      .setTranslation(p.x, p.y, p.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }));
+      .setTranslation(p.x, p.y, p.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+      // Continuous collision detection: at 300 km/h the player covers 0.75 m
+      // per step and would otherwise end up deep inside a rival before the
+      // solver ever saw a contact.
+      .setCcdEnabled(true));
     // Same footprint the contact solver uses, sitting at wheel/floor height.
     world.createCollider(RAPIER.ColliderDesc.cuboid(HALF_WIDTH, 0.34, HALF_LENGTH)
-      .setTranslation(0, -0.12, 0.05).setFriction(0.3).setRestitution(0.1), car.body);
+      .setTranslation(0, -0.12, 0.05).setFriction(0.5).setRestitution(0), car.body);
   }
   function removeBody(car) {
     if (!car.body) return;
@@ -662,6 +680,16 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
   function syncBody(car) {
     if (!car.body) return;
     const p = car.root.position, q = car.root.quaternion;
+    const at = car.body.translation();
+    const jump = Math.hypot(p.x - at.x, p.z - at.z);
+    // A respawn, a lap wrap or a big correction: place the car outright. Asking
+    // the engine to sweep it there would have it arrive at an absurd speed and
+    // launch whatever it touched.
+    if (jump > Math.max(0.5, (car.speed + 5) * lastStep * 2)) {
+      car.body.setTranslation({ x: p.x, y: p.y, z: p.z }, true);
+      car.body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+      return;
+    }
     car.body.setNextKinematicTranslation({ x: p.x, y: p.y, z: p.z });
     car.body.setNextKinematicRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
   }
