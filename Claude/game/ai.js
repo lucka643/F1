@@ -210,6 +210,8 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       targetOffset: startOffset,
       speed: 0,
       progress: signedStart(located.distance),
+      startProgress: signedStart(located.distance),
+      gridLane: located.offset ?? 0,  // centreline offset of its grid box
       spinAngle: 0,
       bodyRoll: 0,
       state: { speedKmh: 0, rpm: 6000 },
@@ -304,7 +306,7 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
         let follow = Math.sqrt(closingOn.speed * closingOn.speed + 2 * brake * room) - (closest < FOLLOW_GAP ? (FOLLOW_GAP - closest) : 0);
         // Stuck behind something slow or stopped: creep so there is motion to
         // steer round it with. The contact solver still keeps the noses apart.
-        if (closingOn.speed < 4 && closest > CONTACT_LONG + 0.6) follow = Math.max(follow, 3);
+        if (closingOn.speed < 4 && (closest > CONTACT_LONG + 0.6 || crawl(car) > 0)) follow = Math.max(follow, 3);
         target = Math.min(target, Math.max(0, follow));
       }
 
@@ -320,20 +322,38 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       car.speed = clamp(car.speed, 0, drs ? TOP_SPEED_DRS : TOP_SPEED);
 
       // --- lateral: stay on the line, step aside to pass ---
-      let desired = 0;
-      if (closingOn && closest < 30 && car.speed > 0.5) {
+      // Off the start, hold the grid lane and drive straight; drift across to
+      // the racing line only once the field is rolling (from ~150 m to ~650 m),
+      // the way a real start funnels in rather than everyone diving at once.
+      const travelled = car.progress - car.startProgress;
+      const keepLane = clamp(1 - (travelled - 150) / 500, 0, 1);
+      let desired = keepLane * (car.gridLane - here.offset);
+      if (closingOn && closest < 30 && (car.speed > 0.5 || closingOn.speed < 0.5)) {
         // Go round on whichever side has more road.
         const room = here.halfWidth - 1.2;
         const spaceLeft = room - closingOn.offset, spaceRight = room + closingOn.offset;
-        const side = spaceLeft >= spaceRight ? 1 : -1;
-        const wantCentre = closingOn.offset + side * (CONTACT_LAT + 0.6);
-        desired = (wantCentre - here.offset) * Math.max(0.6, car.aggression);
+        // Commit to a side per car being passed; re-deciding every step made
+        // cars dither left-right behind a stopped car.
+        const who = closingOn.car ?? 'player';
+        if (car.passing !== who || !car.passSide) {
+          car.passing = who;
+          car.passSide = spaceLeft >= spaceRight ? 1 : -1;
+        }
+        const side = car.passSide;
+        // Aim fully clear of it — a half-committed move just ends up stuck
+        // alongside its rear wheel.
+        const wantCentre = closingOn.offset + side * (CONTACT_LAT + 0.8);
+        desired = wantCentre - here.offset;
+        if (keepLane > 0 && closingOn.speed > 0.5) desired = keepLane * (car.gridLane - here.offset);  // no lane changes in the launch
       }
       car.targetOffset += (desired - car.targetOffset) * Math.min(1, h * 3.0);
       // Sideways speed is limited by forward speed — a real car cannot move
       // across the track without driving along it.
       const lateralStep = (car.targetOffset - car.offset) * Math.min(1, h * 2.4);
-      const maxLateral = (0.4 + car.speed * 0.35) * h;
+      // Sideways speed is a fraction of forward speed — up to ~25 degrees of
+      // heading at a crawl (full lock), ~11 degrees at racing speed. Standing
+      // still, a car cannot move sideways at all.
+      const maxLateral = car.speed * (0.2 + 0.25 / (1 + car.speed / 8)) * h;
       car.offset += clamp(lateralStep, -maxLateral, maxLateral);
       // Never leave the tarmac: keep the centreline offset inside the corridor.
       const limit = Math.max(0, here.halfWidth - 1.1);
@@ -393,6 +413,11 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     }
   }
 
+  // A car part-way out of line to get round a stopped one keeps crawling, so
+  // it can finish steering out rather than freezing nose-to-tail. It is still
+  // held back positionally, so it never goes through.
+  const crawl = car => (Math.abs(car.targetOffset - car.offset) > 0.3 ? 2.5 : 0);
+
   function separate(a, b) {
     const dx = b.px - a.px, dz = b.pz - a.pz;
     if (dx * dx + dz * dz > 49) return;
@@ -408,7 +433,7 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     } else {
       const [behind, ahead] = along >= 0 ? [a, b] : [b, a];
       behind.lineDistance = wrap(behind.lineDistance - penLong);
-      behind.speed = Math.min(behind.speed, ahead.speed);
+      behind.speed = Math.min(behind.speed, Math.max(ahead.speed, crawl(behind)));
     }
     pose(a); pose(b);
   }
@@ -427,7 +452,7 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     } else if (along > 0) {
       // The player is ahead: the AI holds back behind them.
       car.lineDistance = wrap(car.lineDistance - penLong);
-      car.speed = Math.min(car.speed, pSpeed);
+      car.speed = Math.min(car.speed, Math.max(pSpeed, crawl(car)));
     }
     // The player running into the back of an AI is handled by the physics
     // engine: the AI's kinematic body is solid to the player's car.
@@ -480,7 +505,11 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
         let dy = target - yaw;
         while (dy > Math.PI) dy -= 2 * Math.PI;
         while (dy < -Math.PI) dy += 2 * Math.PI;
-        yaw += dy * Math.min(1, h * 14);                    // light smoothing of frame jitter
+        // A car turns only by rolling forward on steered wheels: its yaw rate
+        // is capped at speed x tan(full lock) / wheelbase, so at a crawl it
+        // can barely rotate at all.
+        const maxTurn = Math.max(car.speed, forwardMove / Math.max(h, 1e-3)) * Math.tan(0.44) / 3.54 * h;
+        yaw += clamp(dy * Math.min(1, h * 14), -maxTurn, maxTurn);
       } else if (!Number.isFinite(car.lastX)) {
         yaw = Math.atan2(point.tx, point.tz);
       }
