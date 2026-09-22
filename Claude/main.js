@@ -282,7 +282,7 @@ function showMenu() {
   game.hud.hide();
   game.input.setEnabled(false);
   game.audio.stop();
-  if (game.field) { game.field.dispose(); game.field = null; }
+  disposeField();
 
   const best = game.timing.loadBest();
   $('menu-best').textContent = best ? formatLapTime(best) : '—';
@@ -352,6 +352,11 @@ function startSession() {
   const slot = game.track.gridSlots[slotIndex] ?? game.track.start;
   game.vehicle.reset(slot);
 
+  // Always clear the previous race's field first. "Race again" goes straight
+  // from the results screen to here without passing through the menu, so the
+  // old cars used to stay in the scene, frozen wherever they finished.
+  disposeField();
+
   if (opponents > 0) {
     game.field = createField(game.circuit, RAPIER, game.world, game.scene, {
       count: opponents,
@@ -374,10 +379,15 @@ function startSession() {
     4500);
 }
 
+function disposeField() {
+  if (!game.field) return;
+  for (const rival of game.field.cars) game.pipeline.unregisterDynamic(rival.root);
+  game.field.dispose();
+  game.field = null;
+}
+
 function endSession() {
-  if (game.field) {
-    for (const rival of game.field.cars) game.pipeline.unregisterDynamic(rival.root);
-  }
+  disposeField();
   showMenu();
 }
 
