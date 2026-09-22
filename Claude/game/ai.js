@@ -57,7 +57,24 @@ const TOP_SPEED_DRS = 93.3;
 const DRS_CURVATURE = 0.0035;           // same threshold the player's DRS uses
 const RIDE_HEIGHT = 0.585;
 // km/h at the top of each of the 8 gears, for a believable engine note.
-const GEAR_TOPS = [95, 135, 170, 205, 240, 270, 295, 340];              // car origin above the road, as the player's car rests
+const GEAR_TOPS = [95, 135, 170, 205, 240, 270, 295, 340];
+// Car footprint for contact resolution: an F1 car is ~5.6 m long, ~2.0 m wide.
+const HALF_LENGTH = 2.8;
+const HALF_WIDTH = 1.0;
+const CONTACT_LONG = HALF_LENGTH * 2 + 0.3;   // nose-to-tail clearance kept between cars
+const CONTACT_LAT = HALF_WIDTH * 2 + 0.2;     // side-by-side clearance
+const FOLLOW_GAP = 8;                          // metres a car sits behind one it cannot pass
+
+/**
+ * How much of the car's limit a driver uses, by grid position. The field is
+ * lined up fastest-first like a qualifying order, and the spread is wide
+ * enough (~8.5% from pole to the back) that the cars string out over the first
+ * half-lap instead of running as one pack for the whole race.
+ */
+function paceFor(rank, skill, seed) {
+  const jitter = (Math.sin(seed * 12.9898) * 0.5 + 0.5) * 0.012 - 0.006;
+  return clamp((0.93 + 0.07 * skill) * (1 - 0.085 * rank) + jitter, 0.75, 1.0);
+}
 
 function table(t, v) {
   if (v <= t[0][0]) return t[0][1];
@@ -143,6 +160,11 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
   const player = { progress: null, last: null };
   // Wheel steer/spin animation can be switched off on low-power devices.
   let animateWheels = options.animateWheels !== false;
+  // Car-to-car contact. Off: cars may pass through each other (the original
+  // behaviour). On: nobody can occupy another car's space — AI cars are
+  // resolved against each other here, and each gets a kinematic physics body
+  // so the player's car hits them instead of driving through.
+  let contact = !!options.collisions;
 
   for (let i = 0; i < count; i++) {
     const team = TEAMS[i % TEAMS.length];
@@ -152,8 +174,8 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     // Per-driver character. Skill sets the fraction of the car's limit they
     // use; aggression governs how willingly they take a gap and how late they
     // brake. Both are spread around the requested skill so a field has variety.
-    const spread = (i / Math.max(1, count - 1)) - 0.5;
-    const skill = clamp(baseSkill - spread * 0.18 + (Math.sin(i * 12.9898) * 0.5 + 0.5) * 0.06 - 0.03, 0.30, 1.0);
+    const rank = i / Math.max(1, count - 1);          // 0 = front of the grid
+    const skill = clamp(baseSkill, 0.30, 1.0);
     const aggression = clamp(0.45 + (Math.sin(i * 78.233) * 0.5 + 0.5) * 0.5, 0.25, 0.98);
 
     const visual = buildCarVisual(template, team, options.renderer);
@@ -173,10 +195,15 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       root: visual.root,
       wheels: visual.wheels,
       skill,
+      rank,
       aggression,
-      // How close to the car's measured limit this driver commits. At skill 1
-      // they drive at the player's car's full measured pace.
-      commit: 0.9 + 0.1 * skill,
+      // How close to the car's measured limit this driver commits. The front
+      // of the grid at skill 1 drives at the player's car's full measured pace.
+      commit: paceFor(rank, skill, i),
+      // Slower cars also pull away a little more gently, so the gaps open on
+      // the straights as well as in the corners.
+      power: 1 - 0.12 * rank,
+      launchDelay: 0,
       lineDistance,                 // along the racing line: drives the motion
       lapDistance: located.distance, // along the centreline: comparable with the player
       offset: startOffset,          // metres left of the racing line
@@ -233,8 +260,26 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
         speed: Math.abs(playerState.speed ?? 0) });
     }
 
+    // 1. Plan: speed, lateral position and distance for every car.
     for (const car of cars) {
+      car.prevLineDistance = car.lineDistance;
+      planCar(car, traffic, h);
+    }
+
+    // 2. No car may occupy another's space. With contact on, overlaps are
+    //    resolved here before anything is drawn, so nobody drives through
+    //    anybody; with it off, cars still follow and pass but may overlap.
+    if (contact) resolveContacts(playerState);
+
+    // 3. Place: surface, heading, wheels, progress, engine state.
+    for (const car of cars) placeCar(car, h);
+  }
+
+  function planCar(car, traffic, h) {
       const here = circuit.lineAt(car.lineDistance);
+
+      // Reaction time off the line.
+      if (car.launchDelay > 0) { car.launchDelay -= h; car.speed = 0; car.state.throttle = 1; return; }
 
       // --- speed: the measured pace a quarter-second ahead, so braking starts in time ---
       let target = paceAt(car.lineDistance + car.speed * 0.25) * car.commit;
@@ -245,21 +290,28 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       for (const other of traffic) {
         if (other.car === car) continue;
         const gap = other.progress - car.progress;
-        if (gap <= 0 || gap > 40) continue;
-        if (Math.abs(other.offset - myOffset) >= 2.4) continue;
+        if (gap <= 0 || gap > 45) continue;
+        if (Math.abs(other.offset - myOffset) >= CONTACT_LAT + 0.2) continue;
         if (gap < closest) { closest = gap; closingOn = other; }
       }
       if (closingOn) {
-        // Do not drive into the back of whoever is ahead, but only lift if we
-        // are genuinely closing — a slower car ahead is a chance to pass.
-        const urgency = clamp(1 - closest / 40, 0, 1);
-        target = Math.min(target, closingOn.speed + (1 - urgency) * 10 + car.aggression * 3);
+        // Match the car ahead's speed at FOLLOW_GAP, slower if closer, and
+        // only close up as fast as there is room to brake. This is what stops
+        // them driving into the back of each other; passing is done by
+        // stepping out of line below, which frees this limit.
+        const room = Math.max(0, closest - FOLLOW_GAP);
+        const brake = table(BRAKE, car.speed) * 0.7;
+        let follow = Math.sqrt(closingOn.speed * closingOn.speed + 2 * brake * room) - (closest < FOLLOW_GAP ? (FOLLOW_GAP - closest) : 0);
+        // Stuck behind something slow or stopped: creep so there is motion to
+        // steer round it with. The contact solver still keeps the noses apart.
+        if (closingOn.speed < 4 && closest > CONTACT_LONG + 0.6) follow = Math.max(follow, 3);
+        target = Math.min(target, Math.max(0, follow));
       }
 
       // --- longitudinal: the player's measured acceleration and braking ---
       const drs = Math.abs(here.curvature) < DRS_CURVATURE;
       if (target > car.speed) {
-        car.speed = Math.min(target, car.speed + table(drs ? ACCEL_DRS : ACCEL, car.speed) * h);
+        car.speed = Math.min(target, car.speed + table(drs ? ACCEL_DRS : ACCEL, car.speed) * car.power * h);
         car.state.throttle = 1;
       } else {
         car.state.throttle = target < car.speed - 0.5 ? 0 : 0.35;
@@ -269,16 +321,20 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
 
       // --- lateral: stay on the line, step aside to pass ---
       let desired = 0;
-      if (closingOn && closest < 28 && car.speed > 10) {
+      if (closingOn && closest < 30 && car.speed > 0.5) {
         // Go round on whichever side has more road.
         const room = here.halfWidth - 1.2;
         const spaceLeft = room - closingOn.offset, spaceRight = room + closingOn.offset;
         const side = spaceLeft >= spaceRight ? 1 : -1;
-        const wantCentre = closingOn.offset + side * 2.8;
-        desired = (wantCentre - here.offset) * car.aggression;
+        const wantCentre = closingOn.offset + side * (CONTACT_LAT + 0.6);
+        desired = (wantCentre - here.offset) * Math.max(0.6, car.aggression);
       }
       car.targetOffset += (desired - car.targetOffset) * Math.min(1, h * 3.0);
-      car.offset += (car.targetOffset - car.offset) * Math.min(1, h * 2.4);
+      // Sideways speed is limited by forward speed — a real car cannot move
+      // across the track without driving along it.
+      const lateralStep = (car.targetOffset - car.offset) * Math.min(1, h * 2.4);
+      const maxLateral = (0.4 + car.speed * 0.35) * h;
+      car.offset += clamp(lateralStep, -maxLateral, maxLateral);
       // Never leave the tarmac: keep the centreline offset inside the corridor.
       const limit = Math.max(0, here.halfWidth - 1.1);
       car.offset = clamp(here.offset + car.offset, -limit, limit) - here.offset;
@@ -287,7 +343,98 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
 
       // --- advance ---
       car.lineDistance = (car.lineDistance + car.speed * h) % circuit.racingLineLength;
+  }
 
+  /* ------------------------------------------------------------ contact */
+
+  // Planned world position and heading frame of a car, from its line state.
+  function pose(car) {
+    const p = circuit.lineAt(car.lineDistance);
+    car.px = p.x - p.tz * car.offset;
+    car.pz = p.z + p.tx * car.offset;
+    // The car's real heading once it has one: a car pulling out to pass is
+    // angled across the track and its footprint must be measured that way.
+    if (car.yaw !== undefined) { car.fx = Math.sin(car.yaw); car.fz = Math.cos(car.yaw); }
+    else { car.fx = p.tx; car.fz = p.tz; }
+    car.halfWidthHere = p.halfWidth;
+    car.lineOffsetHere = p.offset;
+  }
+
+  const L = () => circuit.racingLineLength;
+  const wrap = d => ((d % L()) + L()) % L();
+
+  /** Clamp a car's lateral offset back inside the road after a push. */
+  function keepOnRoad(car) {
+    const limit = Math.max(0, (car.halfWidthHere ?? 5) - 1.1);
+    const base = car.lineOffsetHere ?? 0;
+    car.offset = clamp(base + car.offset, -limit, limit) - base;
+    car.targetOffset = car.offset;
+  }
+
+  /**
+   * Separate overlapping cars. Each pair is measured in the rear car's frame:
+   * mostly side-by-side contact pushes them apart sideways (both cars share
+   * it, or only the AI when the other is the player); nose-to-tail contact
+   * holds the car behind back and takes away its excess speed — it has to
+   * brake, it cannot go through.
+   */
+  function resolveContacts(playerState) {
+    let px = 0, pz = 0, pSpeed = 0, hasPlayer = false;
+    if (playerState?.position && player.progress !== null) {
+      px = playerState.position.x; pz = playerState.position.z;
+      pSpeed = Math.max(0, playerState.speed ?? 0); hasPlayer = true;
+    }
+    for (let iteration = 0; iteration < 3; iteration++) {
+      for (const car of cars) pose(car);
+      for (let i = 0; i < cars.length; i++) {
+        for (let j = i + 1; j < cars.length; j++) separate(cars[i], cars[j]);
+      }
+      if (hasPlayer) for (const car of cars) separateFromPlayer(car, px, pz, pSpeed);
+    }
+  }
+
+  function separate(a, b) {
+    const dx = b.px - a.px, dz = b.pz - a.pz;
+    if (dx * dx + dz * dz > 49) return;
+    const along = dx * a.fx + dz * a.fz;
+    const lateral = -dx * a.fz + dz * a.fx;                 // + = b is to a's left
+    const penLong = CONTACT_LONG - Math.abs(along);
+    const penLat = CONTACT_LAT - Math.abs(lateral);
+    if (penLong <= 0 || penLat <= 0) return;
+    if (penLat < penLong && penLat < 1.2) {
+      const side = lateral >= 0 ? 1 : -1;
+      a.offset -= side * penLat / 2; b.offset += side * penLat / 2;
+      keepOnRoad(a); keepOnRoad(b);
+    } else {
+      const [behind, ahead] = along >= 0 ? [a, b] : [b, a];
+      behind.lineDistance = wrap(behind.lineDistance - penLong);
+      behind.speed = Math.min(behind.speed, ahead.speed);
+    }
+    pose(a); pose(b);
+  }
+
+  function separateFromPlayer(car, px, pz, pSpeed) {
+    const dx = px - car.px, dz = pz - car.pz;
+    if (dx * dx + dz * dz > 49) return;
+    const along = dx * car.fx + dz * car.fz;
+    const lateral = -dx * car.fz + dz * car.fx;
+    const penLong = CONTACT_LONG + 0.3 - Math.abs(along);
+    const penLat = CONTACT_LAT + 0.3 - Math.abs(lateral);   // extra room: the player's car is real
+    if (penLong <= 0 || penLat <= 0) return;
+    if (penLat < penLong && penLat < 1.2) {
+      car.offset -= (lateral >= 0 ? 1 : -1) * penLat;      // the AI gives way; the player is solid
+      keepOnRoad(car);
+    } else if (along > 0) {
+      // The player is ahead: the AI holds back behind them.
+      car.lineDistance = wrap(car.lineDistance - penLong);
+      car.speed = Math.min(car.speed, pSpeed);
+    }
+    // The player running into the back of an AI is handled by the physics
+    // engine: the AI's kinematic body is solid to the player's car.
+    pose(car);
+  }
+
+  function placeCar(car, h) {
       // --- place the car: on the road, wheels on the surface ---
       const point = circuit.lineAt(car.lineDistance);
       const nx = -point.tz, nz = point.tx;                     // left of the direction of travel
@@ -325,7 +472,10 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       const moveX = x - car.lastX, moveZ = z - car.lastZ;
       const moved = Math.hypot(moveX, moveZ);
       let yaw = car.yaw ?? Math.atan2(point.tx, point.tz);
-      if (Number.isFinite(car.lastX) && moved > 0.02) {
+      // Only forward motion steers the heading: being held back by the car in
+      // front moves a car slightly backwards, which is not a U-turn.
+      const forwardMove = moveX * point.tx + moveZ * point.tz;
+      if (Number.isFinite(car.lastX) && moved > 0.02 && forwardMove > 0.01) {
         const target = Math.atan2(moveX, moveZ);
         let dy = target - yaw;
         while (dy > Math.PI) dy -= 2 * Math.PI;
@@ -341,8 +491,8 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
         while (dy < -Math.PI) dy += 2 * Math.PI;
         yawRate = dy / Math.max(h, 1e-3);
       }
-      car.vx = moved > 0 ? moveX / Math.max(h, 1e-3) : 0;
-      car.vz = moved > 0 ? moveZ / Math.max(h, 1e-3) : 0;
+      car.vx = moved > 0 && h > 0 ? moveX / h : 0;
+      car.vz = moved > 0 && h > 0 ? moveZ / h : 0;
       car.yaw = yaw; car.lastX = x; car.lastZ = z;
 
       // Roll outward in proportion to lateral acceleration (speed x yaw rate).
@@ -396,7 +546,7 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       car.state.rpm = 6500 + clamp((kmh - low) / Math.max(1, high - low), 0, 1) * 8200;
       car.state.gear = gear + 1;
       car.state.velocity = { x: car.vx ?? 0, z: car.vz ?? 0 };
-    }
+      syncBody(car);
   }
 
   /**
@@ -429,6 +579,50 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
   }
 
   function setCount() { /* field size is fixed for a session */ }
+
+  /* ---- physics bodies for contact with the player ---- */
+  const canCollide = !!(RAPIER && world);
+  function addBody(car) {
+    if (!canCollide || car.body) return;
+    const p = car.root.position, q = car.root.quaternion;
+    car.body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased()
+      .setTranslation(p.x, p.y, p.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }));
+    // Same footprint the contact solver uses, sitting at wheel/floor height.
+    world.createCollider(RAPIER.ColliderDesc.cuboid(HALF_WIDTH, 0.34, HALF_LENGTH)
+      .setTranslation(0, -0.12, 0.05).setFriction(0.3).setRestitution(0.1), car.body);
+  }
+  function removeBody(car) {
+    if (!car.body) return;
+    world.removeRigidBody(car.body);
+    car.body = null;
+  }
+  function syncBody(car) {
+    if (!car.body) return;
+    const p = car.root.position, q = car.root.quaternion;
+    car.body.setNextKinematicTranslation({ x: p.x, y: p.y, z: p.z });
+    car.body.setNextKinematicRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
+  }
+  function setCollisions(on) {
+    contact = !!on;
+    for (const car of cars) {
+      if (contact) { addBody(car); if (car.body) { const p = car.root.position; car.body.setTranslation({ x: p.x, y: p.y, z: p.z }, true); } }
+      else removeBody(car);
+    }
+  }
+
+  /** Put every car on its grid slot without moving it (before the start). */
+  function place(playerState) {
+    trackPlayer(playerState);
+    for (const car of cars) placeCar(car, 0);
+    if (contact) for (const car of cars) addBody(car);
+  }
+
+  /** Lights out: every driver reacts after their own short delay. */
+  function go() {
+    cars.forEach((car, i) => {
+      car.launchDelay = 0.16 + (Math.sin(i * 91.7 + 3.1) * 0.5 + 0.5) * 0.22 + car.rank * 0.25;
+    });
+  }
   function setWheelAnimation(on) {
     animateWheels = !!on;
     if (!animateWheels) {
@@ -440,16 +634,13 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
   }
 
   function setSkill(value) {
-    const skill = clamp(value, 0, 1);
-    cars.forEach((car, i) => {
-      const spread = (i / Math.max(1, cars.length - 1)) - 0.5;
-      car.skill = clamp(skill - spread * 0.18, 0.3, 1);
-      car.commit = 0.9 + 0.1 * car.skill;
-    });
+    const skill = clamp(value, 0.3, 1);
+    cars.forEach((car, i) => { car.skill = skill; car.commit = paceFor(car.rank, skill, i); });
   }
 
   function dispose() {
     for (const car of cars) {
+      removeBody(car);
       car.root.traverse(object => { if (object.isMesh) object.geometry?.dispose?.(); });
     }
     for (const item of disposables) item?.dispose?.();
@@ -457,7 +648,7 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     cars.length = 0;
   }
 
-  return { cars, root, step, classification, setCount, setSkill, setWheelAnimation, dispose,
+  return { cars, root, step, place, go, classification, setCount, setSkill, setWheelAnimation, setCollisions, dispose,
     get playerProgress() { return player.progress; } };
 }
 

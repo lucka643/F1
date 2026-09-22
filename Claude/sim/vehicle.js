@@ -361,7 +361,8 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
       const ray = new RAPIER.Ray(worldPoint, rayDirection);
       const maxDistance = REST_LENGTH + MAX_TRAVEL + TYRE_RADIUS;
       const hit = world.castRayAndGetNormal(
-        ray, maxDistance, true, RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC);
+        ray, maxDistance, true,
+        RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC | RAPIER.QueryFilterFlags.EXCLUDE_KINEMATIC);
 
       if (!hit) {
         wheel.contact = false;

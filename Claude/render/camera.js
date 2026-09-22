@@ -240,7 +240,7 @@ export function createCameraRig(camera, options = {}) {
         const ray = new context.RAPIER.Ray(focus, scratch);
         const hit = context.world.castRay(
           ray, distance, true,
-          context.RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC,
+          context.RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC | context.RAPIER.QueryFilterFlags.EXCLUDE_KINEMATIC,
           undefined, undefined, context.body);
         if (hit && hit.timeOfImpact > 0.4 && hit.timeOfImpact < distance) {
           eye.copy(focus).addScaledVector(scratch, Math.max(0.5, hit.timeOfImpact - 0.25));

@@ -226,6 +226,7 @@ function onSettingChange(key, value) {
     case 'cameraShake': game.cameraRig.setShake(value); break;
     case 'invertLook': game.cameraRig.setInvertLook(value); break;
     case 'opponentWheels': game.field?.setWheelAnimation(value); break;
+    case 'carCollisions': game.field?.setCollisions(value); break;
     case 'onScreenControls': game.hud.setTouchVisible(shouldShowOnScreenControls()); break;
     case 'assistPreset': case 'gripLevel': break;   // read live by the vehicle each step
     case 'timeOfDay': game.pipeline.setTimeOfDay(value); break;
@@ -277,6 +278,8 @@ function resize() {
 
 function showMenu() {
   game.phase = 'menu';
+  $('start-lights').hidden = true;
+  game.start = null;
   game.paused = false;
   $('boot').hidden = true;
   $('menu').hidden = false;
@@ -368,9 +371,15 @@ function startSession() {
       renderer: game.renderer,
       gripLevel: settings.gripLevel,     // the field keeps pace with the player's car
       animateWheels: settings.opponentWheels,
+      collisions: settings.carCollisions,
     });
     for (const rival of game.field.cars) game.pipeline.registerDynamic(rival.root);
+    // Line the field up on its grid boxes, stationary, facing down the track.
+    game.field.place(game.vehicle.state);
   }
+
+  // A race starts from the lights; practice and time trial start at once.
+  startLights(game.mode === 'race');
 
   game.cameraRig.snap(game.vehicle.state);
   game.pipeline.invalidateHistory();
@@ -379,6 +388,51 @@ function startSession() {
     game.mode === 'race' ? `${totalLaps} laps · ${opponents} opponents` :
     game.mode === 'timetrial' ? 'Time trial — set a lap' : 'Free practice',
     4500);
+}
+
+/* ──────────────────────────── start lights ──────────────────────────── */
+
+// Five red lights come on one per second; after a random hold they all turn
+// green and the race is on. Nothing moves before that — not you, not the AI.
+const LIGHT_INTERVAL = 1.0;
+const GREEN_SHOWN_FOR = 20;
+
+function startLights(enabled) {
+  const pod = $('start-lights');
+  const lamps = [...pod.children];
+  for (const lamp of lamps) lamp.className = '';
+  if (!enabled) { game.start = { phase: 'green', t: 0, shown: 0 }; pod.hidden = true; return; }
+  game.start = { phase: 'lights', t: 0, lit: 0, hold: 5 * LIGHT_INTERVAL + 0.6 + Math.random() * 1.9, shown: 0 };
+  pod.hidden = false;
+  pod.classList.remove('fade');
+}
+
+/** Advance the light sequence. Returns true while cars must stay put. */
+function updateStartLights(delta) {
+  const start = game.start;
+  if (!start) return false;
+  const pod = $('start-lights');
+  const lamps = pod.children;
+  if (start.phase === 'lights') {
+    start.t += delta;
+    const lit = Math.min(5, Math.floor(start.t / LIGHT_INTERVAL));
+    for (let i = 0; i < lamps.length; i++) lamps[i].className = i < lit ? 'red' : '';
+    if (start.t >= start.hold) {
+      start.phase = 'green';
+      start.shown = GREEN_SHOWN_FOR;
+      for (const lamp of lamps) lamp.className = 'green';
+      game.field?.go();
+      game.hud.notice('GO!', 1500);
+      return false;
+    }
+    return true;
+  }
+  if (start.shown > 0) {
+    start.shown -= delta;
+    if (start.shown < 1.2) pod.classList.add('fade');
+    if (start.shown <= 0) pod.hidden = true;
+  }
+  return false;
 }
 
 function disposeField() {
@@ -395,6 +449,7 @@ function endSession() {
 
 function showResults() {
   game.phase = 'results';
+  $('start-lights').hidden = true;
   game.input.setEnabled(false);
   game.audio.stop();
   game.hud.hide();
@@ -457,6 +512,7 @@ function frame(now) {
 
   if (running) {
     const inputState = game.input.sample();
+    const holding = updateStartLights(delta);
 
     if (game.input.consume('pause')) { pause(); }
     if (game.input.consume('respawn')) {
@@ -476,17 +532,19 @@ function frame(now) {
 
     // Fixed-step physics. Clamping the accumulator stops a long stall (a tab
     // switch, a shader compile) turning into a burst of hundreds of steps.
-    accumulator = Math.min(accumulator + delta, PHYSICS_STEP * MAX_STEPS_PER_FRAME);
+    // The AI steps inside the same fixed loop as the car, so its physics
+    // bodies move smoothly and contact with the player is solid every step.
+    accumulator = holding ? 0 : Math.min(accumulator + delta, PHYSICS_STEP * MAX_STEPS_PER_FRAME);
     let steps = 0;
     while (accumulator >= PHYSICS_STEP && steps < MAX_STEPS_PER_FRAME) {
+      game.field?.step(PHYSICS_STEP, game.vehicle.state);
       game.vehicle.step(PHYSICS_STEP, inputState, settings);
       accumulator -= PHYSICS_STEP;
       steps++;
     }
 
-    game.field?.step(delta, game.vehicle.state);
     updateRace();
-    game.timing.update(delta, game.vehicle.state.lapDistance, !game.vehicle.state.offTrack);
+    if (!holding) game.timing.update(delta, game.vehicle.state.lapDistance, !game.vehicle.state.offTrack);
 
     if (game.race.totalLaps > 0 && game.timing.state.lap > game.race.totalLaps) {
       showResults();

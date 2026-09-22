@@ -538,6 +538,51 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
     });
   }
 
+  // Paint a grid box at every slot: a line across in front of the car's nose
+  // and two short legs running back along its sides, like a real F1 grid.
+  {
+    const positions = [];
+    const quad = (distance, lateral, halfAlong, halfAcross) => {
+      const sample = sampleCorridor(circuit, distance);
+      const cx = sample.x + sample.nx * lateral, cz = sample.z + sample.nz * lateral;
+      for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]]) {
+        const x = cx + sample.tx * halfAlong * v + sample.nx * halfAcross * u;
+        const z = cz + sample.tz * halfAlong * v + sample.nz * halfAcross * u;
+        const y = (circuit.heightAt(x, z, sample.y) ?? sample.y) + 0.012;
+        positions.push(x, y, z);
+      }
+    };
+    for (const slot of gridSlots) {
+      const located = circuit.locate(slot.position.x, slot.position.z);
+      const front = slot.distance + 3.3;
+      quad(front, located.offset, 0.1, 1.15);                        // front line
+      for (const side of [-1, 1]) quad(front - 0.8, located.offset + side * 1.1, 0.8, 0.07);
+    }
+    // Keep every triangle facing up whichever way the corridor frame is handed.
+    for (let i = 0; i < positions.length; i += 9) {
+      const ux = positions[i + 3] - positions[i], uz = positions[i + 5] - positions[i + 2];
+      const vx = positions[i + 6] - positions[i], vz = positions[i + 8] - positions[i + 2];
+      if (uz * vx - ux * vz < 0) {
+        for (let k = 0; k < 3; k++) {
+          const t = positions[i + 3 + k]; positions[i + 3 + k] = positions[i + 6 + k]; positions[i + 6 + k] = t;
+        }
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.computeVertexNormals();
+    const paint = new THREE.MeshStandardMaterial({
+      color: 0xeef1f4, roughness: 0.6, metalness: 0,
+      polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+    });
+    paint.name = 'GridBoxes';
+    const boxes = new THREE.Mesh(geometry, paint);
+    boxes.name = 'GridBoxes';
+    boxes.receiveShadow = true;
+    boxes.renderOrder = 2;
+    root.add(boxes);
+  }
+
   /* -------------------------------------------------------- lifecycle */
 
   const materials = {

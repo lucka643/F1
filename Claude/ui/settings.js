@@ -33,6 +33,7 @@ export const DEFAULTS = {
   steeringSensitivity: 1,
   gripLevel: 1,
   suspension: true,
+  carCollisions: false,     // off = cars pass through each other
   frontWing: 6,
   rearWing: 6,
   brakeBias: 58,

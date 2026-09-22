@@ -351,6 +351,22 @@ kbd {
   transform: translateX(-50%);
   display: grid; gap: 0.4rem; justify-items: center;
 }
+/* Start lights: five lamps in a panel over the cluster, like the gantry. */
+.start-lights {
+  display: flex; gap: 0.55rem; padding: 0.45rem 0.7rem;
+  background: var(--panel); backdrop-filter: blur(14px); border: 1px solid var(--line);
+  transition: opacity 1s;
+}
+.start-lights[hidden] { display: none; }
+.start-lights.fade { opacity: 0; }
+.start-lights i {
+  width: 22px; height: 22px; border-radius: 50%; display: block;
+  background: #1b1f27; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+.start-lights i.red { background: #ff1f3d; box-shadow: 0 0 14px #ff1f3d, inset 0 0 0 2px rgba(255, 255, 255, 0.25); }
+.start-lights i.green { background: #19e36b; box-shadow: 0 0 14px #19e36b, inset 0 0 0 2px rgba(255, 255, 255, 0.25); }
+@media (max-height: 520px), (max-width: 620px) { .start-lights i { width: 15px; height: 15px; } .start-lights { gap: 0.4rem; } }
+
 .shift-lights { display: flex; gap: 4px; }
 .shift-lights i {
   width: 16px; height: 6px; border-radius: 1px; display: block;
