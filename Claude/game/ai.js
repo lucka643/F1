@@ -91,7 +91,11 @@ const FOLLOW_GAP = 8;                          // metres a car sits behind one i
 // it off, and slews about its own axis until they arrest that too.
 const KNOCK_FRICTION = 8;      // m/s^2 bled off a sideways shove
 const KNOCK_SPIN_DAMP = 1.8;   // per second, how quickly a slew is caught
-const KNOCK_MAX = 8;           // m/s, the most one step of an impact may add
+const KNOCK_MAX = 8;           // m/s, the most one step of an AI-AI impact may add
+// A hit from the player is measured from the physics engine, and capped at the
+// same 16 m/s per step the player's own car is limited to (sim/vehicle.js), so
+// the two cars take the same size of knock.
+const PLAYER_KNOCK_MAX = 16;
 const KNOCK_SPIN_MAX = 2.6;    // rad/s
 
 /**
@@ -369,7 +373,11 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
         car.state.throttle = 1;
       } else {
         car.state.throttle = target < car.speed - 0.5 ? 0 : 0.35;
-        car.speed = Math.max(target, car.speed - table(BRAKE, car.speed) * h);
+        // A car that has just been hit is sliding, not braking in a straight
+        // line: it can only scrub speed off like one, so a knock carries it on
+        // rather than being cancelled by full F1 braking in the same instant.
+        const decel = car.recover > 0 ? Math.min(table(BRAKE, car.speed), KNOCK_FRICTION) : table(BRAKE, car.speed);
+        car.speed = Math.max(target, car.speed - decel * h);
       }
       car.speed = clamp(car.speed, 0, drs ? TOP_SPEED_DRS : TOP_SPEED);
 
@@ -415,8 +423,10 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       if (car.slewRate || car.slew) {
         car.slew = clamp(car.slew + car.slewRate * h, -1.4, 1.4);
         car.slewRate *= Math.max(0, 1 - KNOCK_SPIN_DAMP * h);
-        // The driver catches it: opposite lock brings the car straight again.
-        car.slew -= car.slew * Math.min(1, h * (1.4 + car.speed * 0.05));
+        // The driver catches it — after a human reaction time — with opposite
+        // lock that brings the car straight again.
+        if (car.reaction > 0) car.reaction -= h;
+        else car.slew -= car.slew * Math.min(1, h * (1.4 + car.speed * 0.05));
         if (Math.abs(car.slew) < 0.004 && Math.abs(car.slewRate) < 0.02) { car.slew = 0; car.slewRate = 0; }
       }
 
@@ -518,25 +528,27 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
    * also slews the car — catch a rival's rear corner and its back end steps
    * out, which is what makes contact look like contact.
    */
-  function applyImpact(car, dvAlong, dvLateral, contactAlong) {
-    const scale = Math.min(1, KNOCK_MAX / Math.max(1e-3, Math.hypot(dvAlong, dvLateral)));
+  function applyImpact(car, dvAlong, dvLateral, contactAlong, cap = KNOCK_MAX, spin = null) {
+    const scale = Math.min(1, cap / Math.max(1e-3, Math.hypot(dvAlong, dvLateral)));
     const along = dvAlong * scale, lateral = dvLateral * scale;
     car.speed = Math.max(0, car.speed + along);
-    car.lateralVel = clamp((car.lateralVel ?? 0) + lateral, -KNOCK_MAX, KNOCK_MAX);
+    car.lateralVel = clamp((car.lateralVel ?? 0) + lateral, -PLAYER_KNOCK_MAX, PLAYER_KNOCK_MAX);
     // Hit at the back: the tail swings the way it was pushed and the nose goes
     // the other way. Hit at the front: the reverse.
     const arm = contactAlong < 0 ? 1 : -1;
-    car.slewRate = clamp((car.slewRate ?? 0) + arm * lateral * 0.42, -KNOCK_SPIN_MAX, KNOCK_SPIN_MAX);
+    const slew = spin ?? arm * lateral * 0.42;
+    car.slewRate = clamp((car.slewRate ?? 0) + slew * scale, -KNOCK_SPIN_MAX, KNOCK_SPIN_MAX);
     car.recover = Math.max(car.recover ?? 0, clamp(Math.hypot(along, lateral) * 0.3, 0.3, 2.5));
+    car.reaction = 0.3;                         // a driver needs a moment before catching it
     car.passing = null;                         // whatever it was doing, it is not doing it now
   }
 
   /** Push a car by a world-space velocity change. */
-  function hit(car, dvx, dvz, contactAlong) {
+  function hit(car, dvx, dvz, contactAlong, cap, spin) {
     // Speed and sideways shove are both measured along the car's path, which
     // is where they act — the slew is only how far the car is turned in it.
     const fx = Math.sin(car.yaw ?? 0), fz = Math.cos(car.yaw ?? 0);
-    applyImpact(car, dvx * fx + dvz * fz, -dvx * fz + dvz * fx, contactAlong);
+    applyImpact(car, dvx * fx + dvz * fz, -dvx * fz + dvz * fx, contactAlong, cap, spin);
   }
 
   /** Velocity of an AI car in world space, including any shove it is carrying. */
@@ -545,6 +557,56 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     const lx = -fz, lz = fx;
     const lat = car.lateralVel ?? 0;
     return { x: fx * car.speed + lx * lat, z: fz * car.speed + lz * lat };
+  }
+
+  /**
+   * Newton's third law between the player and the field. The rivals are
+   * kinematic, so to the physics engine they are immovable: it pushes the
+   * player's car and nothing ever pushes back. After each step, read the
+   * impulse the engine applied at every player-rival contact and give the
+   * rival the same impulse the other way. The cars weigh the same, so a
+   * rear-end shunt now fires the rival forward as hard as a rival shunting you
+   * fires you, and a side hit shoves it sideways and slews it.
+   */
+  function feelPlayerContact(playerColliders, playerMass, playerState) {
+    if (!contact || !canCollide || !playerColliders?.length || !playerState?.position) return;
+    const p = playerState.position;
+    for (const car of cars) {
+      if (!car.collider) continue;
+      let impulse = 0, nx = 0, nz = 0;
+      for (const collider of playerColliders) {
+        world.contactPair(collider, car.collider, (manifold, flipped) => {
+          let sum = 0;
+          for (let i = 0; i < manifold.numContacts(); i++) sum += manifold.contactImpulse(i);
+          if (sum <= 0) return;
+          const n = manifold.normal();
+          const sign = flipped ? -1 : 1;                 // normal from the player to the rival
+          impulse += sum;
+          nx += n.x * sign * sum; nz += n.z * sign * sum;
+        });
+      }
+      if (impulse <= 1e-3) continue;
+      // Horizontal push direction, weighted by where the impulse acted; fall
+      // back to centre-to-centre if the normal is degenerate or points back.
+      const cx = car.root.position.x - p.x, cz = car.root.position.z - p.z;
+      let len = Math.hypot(nx, nz);
+      if (len < 1e-6 || nx * cx + nz * cz < 0) { nx = cx; nz = cz; len = Math.hypot(cx, cz) || 1; }
+      nx /= len; nz /= len;
+      const dv = impulse / playerMass;
+      const fx = Math.sin(car.facing ?? car.yaw ?? 0), fz = Math.cos(car.facing ?? car.yaw ?? 0);
+      const contactAlong = -(cx * fx + cz * fz);          // + = the player is ahead of the rival
+      // Where on the rival it was hit: the player's centre clamped onto the
+      // rival's footprint, in the rival's own frame (along its nose, and to
+      // its left). A push that lands off-centre turns the car as well as
+      // moving it — catch a rear corner and the tail steps out even though you
+      // pushed straight ahead. Spin = (lever x push) / yaw inertia, with an F1
+      // car's inertia m(L^2 + W^2)/12, so it is the car's real response.
+      const a = clamp(-(cx * fx + cz * fz), -HALF_LENGTH, HALF_LENGTH);
+      const b = clamp(-(-cx * fz + cz * fx), -HALF_WIDTH, HALF_WIDTH);
+      const dvf = (nx * fx + nz * fz) * dv, dvl = (-nx * fz + nz * fx) * dv;
+      const spin = (b * dvf - a * dvl) * 12 / ((2 * HALF_LENGTH) ** 2 + (2 * HALF_WIDTH) ** 2);
+      hit(car, nx * dv, nz * dv, contactAlong, PLAYER_KNOCK_MAX, spin);
+    }
   }
 
   function separate(a, b) {
@@ -591,19 +653,11 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     const penLat = CONTACT_LAT - Math.abs(lateral);
     if (penLong <= 0 || penLat <= 0) return;
 
-    // The player is a real, heavy car: a rival hit by one takes most of the
-    // closing speed rather than brushing it off. Run into the back of one and
-    // it is fired forward; catch its rear corner and it slews out of your way.
-    const mine = velocityOf(car);
-    const dist = Math.hypot(dx, dz) || 1;
-    const nx = dx / dist, nz = dz / dist;                    // rival -> player
-    const closing = (player3.vx - mine.x) * nx + (player3.vz - mine.z) * nz;
-    if (exchange && closing < -0.5) {                        // player driving into the rival
-      const share = -closing * 0.75;
-      hit(car, -share * nx, -share * nz, along);
-    }
-
-    // Then just enough positional correction that the two never sit inside
+    // Momentum between the player and a rival is not guessed here: it is read
+    // from the physics engine after each step (feelPlayerContact), so the rival
+    // takes exactly the impulse the player's car took. This only keeps the two
+    // from sitting inside each other.
+    // Just enough positional correction that the two never sit inside
     // each other; the engine handles the player's own half of the contact.
     if (penLat < penLong && penLat < 1.2) {
       car.offset -= (lateral >= 0 ? 1 : -1) * Math.min(penLat, correctionLimit);
@@ -783,13 +837,14 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       // solver ever saw a contact.
       .setCcdEnabled(true));
     // Same footprint the contact solver uses, sitting at wheel/floor height.
-    world.createCollider(RAPIER.ColliderDesc.cuboid(HALF_WIDTH, 0.34, HALF_LENGTH)
+    car.collider = world.createCollider(RAPIER.ColliderDesc.cuboid(HALF_WIDTH, 0.34, HALF_LENGTH)
       .setTranslation(0, -0.12, 0.05).setFriction(0.5).setRestitution(0), car.body);
   }
   function removeBody(car) {
     if (!car.body) return;
     world.removeRigidBody(car.body);
     car.body = null;
+    car.collider = null;
   }
   function syncBody(car) {
     if (!car.body) return;
@@ -856,7 +911,7 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     cars.length = 0;
   }
 
-  return { cars, root, step, place, go, classification, setCount, setSkill, setWheelAnimation, setCollisions, dispose,
+  return { cars, root, step, place, go, feelPlayerContact, classification, setCount, setSkill, setWheelAnimation, setCollisions, dispose,
     get playerProgress() { return player.progress; } };
 }
 

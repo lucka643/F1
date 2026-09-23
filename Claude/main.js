@@ -570,6 +570,7 @@ function frame(now) {
       inputState.shiftDown = pendingShift.down;
       game.field?.step(PHYSICS_STEP, game.vehicle.state);
       game.vehicle.step(PHYSICS_STEP, inputState, settings);
+      game.field?.feelPlayerContact(game.vehicle.colliders, game.vehicle.mass, game.vehicle.state);
       pendingShift.up = pendingShift.down = false;
       accumulator -= PHYSICS_STEP;
       steps++;

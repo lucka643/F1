@@ -138,12 +138,14 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
     .setMass(MASS)
     .setFriction(0.22)
     .setRestitution(0.05);
-  world.createCollider(chassis, body);
+  // Kept so contacts with other cars can be measured after each step (the AI
+  // uses them to take the same impulse the player's car received).
+  const colliders = [world.createCollider(chassis, body)];
   // Nose and rear-wing bumpers so the car does not bury itself in a barrier.
-  world.createCollider(RAPIER.ColliderDesc.cuboid(0.95, 0.06, 0.28)
-    .setTranslation(0, -0.34, 2.72).setMass(6).setFriction(0.2), body);
-  world.createCollider(RAPIER.ColliderDesc.cuboid(0.72, 0.16, 0.22)
-    .setTranslation(0, 0.18, -2.22).setMass(6).setFriction(0.2), body);
+  colliders.push(world.createCollider(RAPIER.ColliderDesc.cuboid(0.95, 0.06, 0.28)
+    .setTranslation(0, -0.34, 2.72).setMass(6).setFriction(0.2), body));
+  colliders.push(world.createCollider(RAPIER.ColliderDesc.cuboid(0.72, 0.16, 0.22)
+    .setTranslation(0, 0.18, -2.22).setMass(6).setFriction(0.2), body));
 
   /* ---- live state ---- */
   const wheels = WHEEL_POSITIONS.map((w, index) => ({
@@ -812,6 +814,8 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
 
   return {
     body,
+    colliders,
+    mass: MASS + 12,
     state,
     step,
     reset,
