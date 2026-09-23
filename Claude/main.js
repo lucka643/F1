@@ -361,6 +361,7 @@ function startSession() {
   game.input.setEnabled(true);
 
   game.timing.reset(game.mode);
+  game.stepped = false;
   game.race = {
     totalLaps, position: 1, classification: [],
     gapAhead: null, gapBehind: null, finished: false,
@@ -579,7 +580,11 @@ function frame(now) {
     }
 
     updateRace();
-    if (!holding) game.timing.update(delta, game.vehicle.state.lapDistance, !game.vehicle.state.offTrack);
+    // Timing starts from the first frame the car has actually been simulated.
+    // At 120 Hz and above the first frame after the green can run no physics
+    // step at all; timing seeded from it read a stale position.
+    if (steps > 0) game.stepped = true;
+    if (!holding && game.stepped) game.timing.update(delta, game.vehicle.state.lapDistance, !game.vehicle.state.offTrack);
 
     // Finish on laps actually COMPLETED, never on the lap counter, which can
     // be moved by a re-seed after a teleport; and never in the first seconds

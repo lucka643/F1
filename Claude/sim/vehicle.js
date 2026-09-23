@@ -367,6 +367,7 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
     forceVector.copy(up).multiplyScalar(-downforce);
     forceVector.addScaledVector(state.velocity, -drag / Math.max(absSpeed, 0.001));
     body.addForce(forceVector, true);
+    appliedForce.copy(forceVector);
 
     const frontDownforce = downforce * AERO.balance;
     const rearDownforce = downforce * (1 - AERO.balance);
@@ -555,6 +556,7 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
         .addScaledVector(right, lateral)
         .addScaledVector(wheel.contactNormal, load);
       body.addForceAtPoint(forceVector, wheel.contactPoint, true);
+      appliedForce.add(forceVector);
 
       wheel.temperature += (Math.abs(wheel.skidding) * 140 - (wheel.temperature - 85) * 0.5) * dt;
     }
@@ -603,8 +605,10 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
     const inContact = contactHint || touchingACar();
     if (inContact) settleTimer = 0.75;
     else settleTimer = Math.max(0, settleTimer - dt);
-    const sliding = settleTimer > 0 && Math.abs(state.velocity.dot(right.set(-1, 0, 0).applyQuaternion(state.quaternion))) > 4;
-    setGroundLock(inContact || (settleTimer > 0 && (sliding || settleTimer > 0.5)));
+    // Hold it for 0.75 s after the last touch: a heavy hit compresses the
+    // springs hard, and releasing the attitude straight away let them pitch
+    // the car ~10 degrees on the rebound.
+    setGroundLock(inContact || settleTimer > 0);
 
     const beforeV = body.linvel(), beforeW = body.angvel();
 
@@ -622,7 +626,7 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
 
     // Car-to-car hits: record the shove (the AI gives it back to the rival)
     // and let the tyres resist the sideways part of it.
-    shapeCarContact(beforeV, settings);
+    shapeCarContact(beforeV, settings, dt);
 
     readBody();
 
@@ -748,6 +752,10 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
    */
   let groundLocked = false;
   let settleTimer = 0;                  // seconds the hit's slide may keep the attitude lock
+  // Every force the car applies to itself this step (aero, springs, tyres),
+  // so the part of a velocity change that came from another car can be told
+  // apart from the car's own driving.
+  const appliedForce = new THREE.Vector3();
   function setGroundLock(on) {
     if (on === groundLocked) return;
     groundLocked = on;
@@ -775,34 +783,40 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
    * mostly moves the car the way its wheels point. The rival still gets the
    * full shove: the grip is the road pushing back on this car, not less hit.
    */
-  function shapeCarContact(beforeV, settings) {
+  function shapeCarContact(beforeV, settings, dt) {
     state.carContactDv = null;
     if (!groundLocked && !touchingACar()) return;
-    let v = body.linvel();
-    const dvx = v.x - beforeV.x, dvz = v.z - beforeV.z;
-    state.carContactDv = { x: dvx, z: dvz };
+    const v = body.linvel();
+    // The contact's share of this step's velocity change: whatever the car's
+    // own forces and gravity do not account for. Cornering, braking and the
+    // springs are the car's own and must be left alone — treating all of the
+    // change as the hit meant that, near another car, the tyres could not turn
+    // the car at all and it slid diagonally.
+    const k = dt / TOTAL_MASS;
+    const cx = v.x - beforeV.x - appliedForce.x * k;
+    const cy = v.y - beforeV.y - appliedForce.y * k + 9.81 * dt;
+    const cz = v.z - beforeV.z - appliedForce.z * k;
+    if (Math.hypot(cx, cy, cz) < 0.02) return;              // no hit this step
+    state.carContactDv = { x: cx, z: cz };
     state.preStepVelocity = { x: beforeV.x, y: beforeV.y, z: beforeV.z };
 
-    // No up or down from a hit. The suspension and gravity change vertical
-    // speed by well under 0.15 m/s in one step; anything beyond that on a step
-    // spent touching another car is the other car, so it is taken back out.
-    // A per-step allowance alone is not enough: a long shove adds it up step
-    // after step until the car is climbing, so rising speed is also capped
-    // outright while another car is touching this one.
-    const dvy = v.y - beforeV.y;
-    const vy = Math.min(beforeV.y + clamp(dvy, -0.15, 0.15), 0.3);
-    if (vy !== v.y) { body.setLinvel({ x: v.x, y: vy, z: v.z }, true); v = body.linvel(); }
+    // No up or down from a hit: take its vertical part back out.
+    let vy = v.y - cy;
+    // Belt and braces while actually touching: never climbing.
+    vy = Math.min(vy, Math.max(beforeV.y, 0.3));
 
+    // Tyres resist the part of the hit that is across the car, per the
+    // "sideways grip in crashes" setting (0% = shoved freely, 100% = none).
     const grip = clamp((settings?.crashSideGrip ?? 75) / 100, 0, 1);
-    if (grip <= 0) return;
     const q = body.rotation();
     quaternion.set(q.x, q.y, q.z, q.w);
     right.set(-1, 0, 0).applyQuaternion(quaternion);
     const rl = Math.hypot(right.x, right.z) || 1;
     const rx = right.x / rl, rz = right.z / rl;
-    const sideways = dvx * rx + dvz * rz;
-    body.setLinvel({ x: v.x - rx * sideways * grip, y: v.y, z: v.z - rz * sideways * grip }, true);
+    const sideways = (cx * rx + cz * rz) * grip;
+    body.setLinvel({ x: v.x - rx * sideways, y: vy, z: v.z - rz * sideways }, true);
   }
+
 
 
   /** Clamp how much one solver step may change the body's motion. */
@@ -906,6 +920,13 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
       wheel.temperature = 85;
     }
     readBody();
+    // Where the car now is on the lap, straight away. It was only worked out
+    // inside step(), so between a reset and the first physics step — the whole
+    // of the start lights — anything reading it got the previous position.
+    const located = circuit.locate(state.position.x, state.position.z);
+    state.lapDistance = located.distance;
+    state.lateralOffset = located.offset;
+    state.carContactDv = null;
   }
 
   /** Put the car back on the racing line after a flip or a fall. */

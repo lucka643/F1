@@ -225,6 +225,7 @@ export function createTiming(circuit, options = {}) {
   let lapProgress = 0;           // metres since the last S/F crossing
   let offTrackTime = 0;
   let reseeded = false;             // a teleport re-seed is pending a clean lap start
+  let lapTravel = 0;                // metres actually driven forward since this lap began
   let onTrackTime = 0;
   let sessionDistance = 0;
   let deltaShown = 0;
@@ -401,6 +402,7 @@ export function createTiming(circuit, options = {}) {
   }
 
   function beginLap(atTime) {
+    lapTravel = 0;
     previousStart = current ? current.startTime : atTime;
     previousLap = current;
     current = makeLap(state.lapCount + 1, atTime, binCount);
@@ -518,9 +520,13 @@ export function createTiming(circuit, options = {}) {
     }
     current.colour = colour;
 
-    if (reseeded) {
-      // This "lap" is the tail of one interrupted by a re-seed: start a clean
-      // one rather than crediting a lap that was never driven.
+    if (reseeded || lapTravel < lapLength * 0.5) {
+      // Not a lap: either the tail of one interrupted by a re-seed, or a
+      // crossing reached without driving most of the circuit — which is what
+      // happened off a standing start, when rolling back over the line (or a
+      // stale position read at the green) wrapped the counter to "almost a
+      // lap" and the first forward crossing completed it. Start a clean lap at
+      // the line instead of crediting one that was never driven.
       reseeded = false;
       beginLap(atTime);
       return;
@@ -691,7 +697,7 @@ export function createTiming(circuit, options = {}) {
       step = 0;
     } else {
       lapProgress += step;
-      if (step > 0) sessionDistance += step;
+      if (step > 0) { sessionDistance += step; lapTravel += step; }
     }
     state.sessionDistance = sessionDistance;
 
@@ -838,6 +844,7 @@ export function createTiming(circuit, options = {}) {
     started = false;
     armed = false;
     reseeded = false;
+    lapTravel = 0;
     lapProgress = 0;
     prevDistance = 0;
     offTrackTime = 0;

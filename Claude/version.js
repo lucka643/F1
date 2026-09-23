@@ -6,5 +6,5 @@
  * which matters here, because Chrome has already served stale modules once and
  * cost an evening of debugging a bug that was fixed on disk.
  */
-export const VERSION = '0.9.14';
+export const VERSION = '0.9.15';
 export const BUILD_NAME = 'Highway Battle';
