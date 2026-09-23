@@ -87,6 +87,12 @@ const HALF_WIDTH = 1.0;
 const CONTACT_LONG = HALF_LENGTH * 2 + 0.3;   // nose-to-tail clearance kept between cars
 const CONTACT_LAT = HALF_WIDTH * 2 + 0.2;     // side-by-side clearance
 const FOLLOW_GAP = 8;                          // metres a car sits behind one it cannot pass
+// Being hit. A knocked car keeps the speed it was given until its tyres scrub
+// it off, and slews about its own axis until they arrest that too.
+const KNOCK_FRICTION = 8;      // m/s^2 bled off a sideways shove
+const KNOCK_SPIN_DAMP = 1.8;   // per second, how quickly a slew is caught
+const KNOCK_MAX = 8;           // m/s, the most one step of an impact may add
+const KNOCK_SPIN_MAX = 2.6;    // rad/s
 
 /**
  * How much of the car's limit a driver uses, by grid position. The field is
@@ -248,6 +254,10 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       gridLane: located.offset ?? 0,  // centreline offset of its grid box
       spinAngle: 0,
       bodyRoll: 0,
+      lateralVel: 0,        // m/s sideways from being hit, + = toward its left
+      slew: 0,              // radians the car is turned across its path
+      slewRate: 0,
+      recover: 0,           // seconds spent gathering it up again after a hit
       state: { speedKmh: 0, rpm: 6000 },
     });
   }
@@ -348,6 +358,11 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       }
 
       // --- longitudinal: the player's measured acceleration and braking ---
+      // Sideways and sideways-on, a car has no traction to use: after contact
+      // it runs down to a slower speed before picking the pace back up.
+      if (car.recover > 0 || Math.abs(car.slew) > 0.08) {
+        target = Math.min(target, car.speed * (1 - Math.min(0.9, Math.abs(car.slew)) * 0.35));
+      }
       const drs = Math.abs(here.curvature) < DRS_CURVATURE;
       if (target > car.speed) {
         car.speed = Math.min(target, car.speed + table(drs ? ACCEL_DRS : ACCEL, car.speed) * car.power * h);
@@ -383,6 +398,28 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
         desired = wantCentre - here.offset;
         if (keepLane > 0 && closingOn.speed > 0.5) desired = keepLane * (car.gridLane - here.offset);  // no lane changes in the launch
       }
+      // A car that has been hit is not driving for a moment: it is sliding
+      // where the impact put it and catching the slide. Only once that has
+      // settled does it go back to chasing the line.
+      if (car.recover > 0) {
+        car.recover = Math.max(0, car.recover - h);
+        desired = car.targetOffset;                 // stop asking for a new line mid-slide
+      }
+      if (car.lateralVel) {
+        car.offset += car.lateralVel * h;
+        car.targetOffset += car.lateralVel * h * 0.5;
+        const scrub = KNOCK_FRICTION * h;
+        car.lateralVel = Math.abs(car.lateralVel) <= scrub ? 0
+          : car.lateralVel - Math.sign(car.lateralVel) * scrub;
+      }
+      if (car.slewRate || car.slew) {
+        car.slew = clamp(car.slew + car.slewRate * h, -1.4, 1.4);
+        car.slewRate *= Math.max(0, 1 - KNOCK_SPIN_DAMP * h);
+        // The driver catches it: opposite lock brings the car straight again.
+        car.slew -= car.slew * Math.min(1, h * (1.4 + car.speed * 0.05));
+        if (Math.abs(car.slew) < 0.004 && Math.abs(car.slewRate) < 0.02) { car.slew = 0; car.slewRate = 0; }
+      }
+
       car.targetOffset += (desired - car.targetOffset) * Math.min(1, h * 3.0);
       // Sideways speed is limited by forward speed — a real car cannot move
       // across the track without driving along it.
@@ -392,8 +429,9 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       // still, a car cannot move sideways at all.
       const maxLateral = car.speed * (0.2 + 0.25 / (1 + car.speed / 8)) * h;
       car.offset += clamp(lateralStep, -maxLateral, maxLateral);
-      // Never leave the tarmac: keep the centreline offset inside the corridor.
-      const limit = Math.max(0, here.halfWidth - 1.1);
+      // Never leave the tarmac under power — but a car that has just been hit
+      // can be pushed wide onto the edge of the road, as it would be.
+      const limit = Math.max(0, here.halfWidth - 1.1) + (car.recover > 0 ? 1.6 : 0);
       car.offset = clamp(here.offset + car.offset, -limit, limit) - here.offset;
       if (!Number.isFinite(car.offset)) car.offset = 0;
       if (!Number.isFinite(car.targetOffset)) car.targetOffset = 0;
@@ -411,7 +449,8 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     car.pz = p.z + p.tx * car.offset;
     // The car's real heading once it has one: a car pulling out to pass is
     // angled across the track and its footprint must be measured that way.
-    if (car.yaw !== undefined) { car.fx = Math.sin(car.yaw); car.fz = Math.cos(car.yaw); }
+    const facing = car.facing ?? car.yaw;
+    if (facing !== undefined) { car.fx = Math.sin(facing); car.fz = Math.cos(facing); }
     else { car.fx = p.tx; car.fz = p.tz; }
     car.halfWidthHere = p.halfWidth;
     car.lineOffsetHere = p.offset;
@@ -422,7 +461,7 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
 
   /** Clamp a car's lateral offset back inside the road after a push. */
   function keepOnRoad(car) {
-    const limit = Math.max(0, (car.halfWidthHere ?? 5) - 1.1);
+    const limit = Math.max(0, (car.halfWidthHere ?? 5) - 1.1) + (car.recover > 0 ? 1.6 : 0);
     const base = car.lineOffsetHere ?? 0;
     car.offset = clamp(base + car.offset, -limit, limit) - base;
     car.targetOffset = car.offset;
@@ -442,20 +481,26 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
   // case is a car easing out of an overlap over a few frames.
   const MAX_CORRECTION = 1.5;            // metres per second
   let correctionLimit = 0.05;
+  let exchange = false;                  // momentum is traded on the first pass only
 
   function resolveContacts(playerState) {
     correctionLimit = Math.max(0.002, MAX_CORRECTION * lastStep);
-    let px = 0, pz = 0, pSpeed = 0, hasPlayer = false;
+    let hasPlayer = false;
+    const p3 = { x: 0, z: 0, vx: 0, vz: 0 };
     if (playerState?.position && player.progress !== null) {
-      px = playerState.position.x; pz = playerState.position.z;
-      pSpeed = Math.max(0, playerState.speed ?? 0); hasPlayer = true;
+      p3.x = playerState.position.x; p3.z = playerState.position.z;
+      p3.vx = playerState.velocity?.x ?? 0; p3.vz = playerState.velocity?.z ?? 0;
+      hasPlayer = true;
     }
+    // Momentum is exchanged once per physics step; the later passes only tidy
+    // up overlaps. Trading it on every pass would treat one bump as three.
     for (let iteration = 0; iteration < 3; iteration++) {
+      exchange = iteration === 0;
       for (const car of cars) pose(car);
       for (let i = 0; i < cars.length; i++) {
         for (let j = i + 1; j < cars.length; j++) separate(cars[i], cars[j]);
       }
-      if (hasPlayer) for (const car of cars) separateFromPlayer(car, px, pz, pSpeed);
+      if (hasPlayer) for (const car of cars) separateFromPlayer(car, p3);
     }
   }
 
@@ -463,6 +508,44 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
   // it can finish steering out rather than freezing nose-to-tail. It is still
   // held back positionally, so it never goes through.
   const crawl = car => (Math.abs(car.targetOffset - car.offset) > 0.3 ? 2.5 : 0);
+
+  /**
+   * Transfer momentum into a car that has been hit.
+   *
+   * The cars are the same mass, so a shunt splits the closing speed between
+   * them. Along the car it changes its speed; across the car it shoves it
+   * sideways; and because a hit lands at one end rather than the middle, it
+   * also slews the car — catch a rival's rear corner and its back end steps
+   * out, which is what makes contact look like contact.
+   */
+  function applyImpact(car, dvAlong, dvLateral, contactAlong) {
+    const scale = Math.min(1, KNOCK_MAX / Math.max(1e-3, Math.hypot(dvAlong, dvLateral)));
+    const along = dvAlong * scale, lateral = dvLateral * scale;
+    car.speed = Math.max(0, car.speed + along);
+    car.lateralVel = clamp((car.lateralVel ?? 0) + lateral, -KNOCK_MAX, KNOCK_MAX);
+    // Hit at the back: the tail swings the way it was pushed and the nose goes
+    // the other way. Hit at the front: the reverse.
+    const arm = contactAlong < 0 ? 1 : -1;
+    car.slewRate = clamp((car.slewRate ?? 0) + arm * lateral * 0.42, -KNOCK_SPIN_MAX, KNOCK_SPIN_MAX);
+    car.recover = Math.max(car.recover ?? 0, clamp(Math.hypot(along, lateral) * 0.3, 0.3, 2.5));
+    car.passing = null;                         // whatever it was doing, it is not doing it now
+  }
+
+  /** Push a car by a world-space velocity change. */
+  function hit(car, dvx, dvz, contactAlong) {
+    // Speed and sideways shove are both measured along the car's path, which
+    // is where they act — the slew is only how far the car is turned in it.
+    const fx = Math.sin(car.yaw ?? 0), fz = Math.cos(car.yaw ?? 0);
+    applyImpact(car, dvx * fx + dvz * fz, -dvx * fz + dvz * fx, contactAlong);
+  }
+
+  /** Velocity of an AI car in world space, including any shove it is carrying. */
+  function velocityOf(car) {
+    const fx = Math.sin(car.yaw ?? 0), fz = Math.cos(car.yaw ?? 0);
+    const lx = -fz, lz = fx;
+    const lat = car.lateralVel ?? 0;
+    return { x: fx * car.speed + lx * lat, z: fz * car.speed + lz * lat };
+  }
 
   function separate(a, b) {
     const dx = b.px - a.px, dz = b.pz - a.pz;
@@ -472,6 +555,20 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     const penLong = CONTACT_LONG - Math.abs(along);
     const penLat = CONTACT_LAT - Math.abs(lateral);
     if (penLong <= 0 || penLat <= 0) return;
+
+    // Momentum first: equal masses, so each car takes half of whatever they
+    // were closing at. This is what makes one car knock another aside instead
+    // of the pair sliding apart like magnets.
+    const va = velocityOf(a), vb = velocityOf(b);
+    const dist = Math.hypot(dx, dz) || 1;
+    const nx = dx / dist, nz = dz / dist;                    // a -> b
+    const closing = (va.x - vb.x) * nx + (va.z - vb.z) * nz;
+    if (exchange && closing > 0.5) {
+      const share = closing * 0.5;
+      hit(a, -share * nx, -share * nz, along);
+      hit(b, share * nx, share * nz, -along);
+    }
+
     if (penLat < penLong && penLat < 1.2) {
       const side = lateral >= 0 ? 1 : -1;
       const push = Math.min(penLat / 2, correctionLimit);
@@ -485,25 +582,35 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     pose(a); pose(b);
   }
 
-  function separateFromPlayer(car, px, pz, pSpeed) {
-    const dx = px - car.px, dz = pz - car.pz;
+  function separateFromPlayer(car, player3) {
+    const dx = player3.x - car.px, dz = player3.z - car.pz;
     if (dx * dx + dz * dz > 49) return;
     const along = dx * car.fx + dz * car.fz;
     const lateral = -dx * car.fz + dz * car.fx;
-    const penLong = CONTACT_LONG + 0.3 - Math.abs(along);
-    const penLat = CONTACT_LAT + 0.3 - Math.abs(lateral);   // extra room: the player's car is real
+    const penLong = CONTACT_LONG - Math.abs(along);
+    const penLat = CONTACT_LAT - Math.abs(lateral);
     if (penLong <= 0 || penLat <= 0) return;
+
+    // The player is a real, heavy car: a rival hit by one takes most of the
+    // closing speed rather than brushing it off. Run into the back of one and
+    // it is fired forward; catch its rear corner and it slews out of your way.
+    const mine = velocityOf(car);
+    const dist = Math.hypot(dx, dz) || 1;
+    const nx = dx / dist, nz = dz / dist;                    // rival -> player
+    const closing = (player3.vx - mine.x) * nx + (player3.vz - mine.z) * nz;
+    if (exchange && closing < -0.5) {                        // player driving into the rival
+      const share = -closing * 0.75;
+      hit(car, -share * nx, -share * nz, along);
+    }
+
+    // Then just enough positional correction that the two never sit inside
+    // each other; the engine handles the player's own half of the contact.
     if (penLat < penLong && penLat < 1.2) {
-      // The AI gives way; the player is solid.
       car.offset -= (lateral >= 0 ? 1 : -1) * Math.min(penLat, correctionLimit);
       keepOnRoad(car);
     } else if (along > 0) {
-      // The player is ahead: the AI holds back behind them.
       car.lineDistance = wrap(car.lineDistance - Math.min(penLong, correctionLimit));
-      car.speed = Math.min(car.speed, Math.max(pSpeed, crawl(car)));
     }
-    // The player running into the back of an AI is handled by the physics
-    // engine: the AI's kinematic body is solid to the player's car.
     pose(car);
   }
 
@@ -570,13 +677,18 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       }
       car.vx = moved > 0 && h > 0 ? moveX / h : 0;
       car.vz = moved > 0 && h > 0 ? moveZ / h : 0;
-      car.yaw = yaw; car.lastX = x; car.lastZ = z;
+      car.lastX = x; car.lastZ = z;
+      car.yaw = yaw;                    // the direction it is travelling
+      // What it points at: its direction of travel, plus however far a knock
+      // has it turned across that path. Kept separate so a slide cannot feed
+      // back into the heading and spiral.
+      car.facing = yaw + (car.slew ?? 0);
 
       // Roll outward in proportion to lateral acceleration (speed x yaw rate).
       const lateralG = car.speed * (car.yawRateSmooth ?? yawRate) / 9.81;
       const roll = clamp(lateralG * 0.012, -0.06, 0.06);
       car.bodyRoll += (roll - car.bodyRoll) * Math.min(1, h * 4);
-      yawQuat.setFromAxisAngle(up, yaw);
+      yawQuat.setFromAxisAngle(up, yaw + (car.slew ?? 0));
       pitchQuat.setFromAxisAngle(across, -pitch);
       rollQuat.setFromAxisAngle(forwardAxis, car.bodyRoll);
       car.root.quaternion.copy(yawQuat).multiply(pitchQuat).multiply(rollQuat);
@@ -609,7 +721,9 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
           wheel.spin.rotation.x = car.spinAngle;
           // Same convention as the car's yaw: a positive Y rotation turns the
           // wheel the way a positive yaw rate turns the car.
-          if (wheel.front) wheel.steer.rotation.y = car.steer;
+          // Catching a slide means opposite lock, so the front wheels point
+          // against the way the car is slewed.
+          if (wheel.front) wheel.steer.rotation.y = clamp(car.steer - (car.slew ?? 0) * 0.8, -0.5, 0.5);
         }
       }
 
