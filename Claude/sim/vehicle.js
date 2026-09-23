@@ -21,6 +21,7 @@ import * as THREE from 'three';
 /* ───────────────────────────── constants ───────────────────────────── */
 
 const MASS = 798;                       // kg, F1 minimum with driver
+const TOTAL_MASS = MASS + 12;           // plus the two bumper colliders
 const WHEELBASE = 3.54;
 const TRACK_WIDTH = 1.60;
 const CG_HEIGHT = 0.28;
@@ -319,7 +320,13 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
 
   /* ---- the step ---- */
 
-  function step(dt, input, settings = {}) {
+  /**
+   * @param contactHint  true when another car is about to touch this one (the
+   *   AI knows where every car will be; see field.aboutToTouch). The height
+   *   lock must already be on when a fast hit lands, and the engine's own
+   *   contact list only reports it a step late.
+   */
+  function step(dt, input, settings = {}, contactHint = false) {
     const assists = resolveAssists(settings);
     // How hard the tyres bite, as a player-facing dial. 1.0 is the tuned
     // baseline; below that the car slides earlier, above it the car is planted.
@@ -587,6 +594,18 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
 
     // What the car was doing before the solver ran, so a contact that tries to
     // launch it can be caught below.
+    // Touching another car: hold ride height and attitude for the duration,
+    // so the contact can slide and spin the car across the road but never
+    // lift it, sink it, tip it or roll it (see shapeCarContact).
+    // ...and keep it on while the slide a hit started is still going: being
+    // shoved sideways at speed and released mid-slide let the tyres trip the
+    // car over after the contact had ended.
+    const inContact = contactHint || touchingACar();
+    if (inContact) settleTimer = 0.75;
+    else settleTimer = Math.max(0, settleTimer - dt);
+    const sliding = settleTimer > 0 && Math.abs(state.velocity.dot(right.set(-1, 0, 0).applyQuaternion(state.quaternion))) > 4;
+    setGroundLock(inContact || (settleTimer > 0 && (sliding || settleTimer > 0.5)));
+
     const beforeV = body.linvel(), beforeW = body.angvel();
 
     world.step();
@@ -600,6 +619,10 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
     // heavy but survivable impact.
     limitImpulse(beforeV, MAX_IMPACT_SPEED_CHANGE * dt * 120, MAX_IMPACT_LIFT * dt * 120,
       beforeW, MAX_IMPACT_SPIN_CHANGE * dt * 120);
+
+    // Car-to-car hits: record the shove (the AI gives it back to the rival)
+    // and let the tyres resist the sideways part of it.
+    shapeCarContact(beforeV, settings);
 
     readBody();
 
@@ -698,6 +721,90 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
     forces[rightIndex] = Math.max(0, forces[rightIndex] - transfer);
   }
 
+  /** Is any part of this car in contact with another car right now? */
+  function touchingACar() {
+    let touching = false;
+    for (const collider of colliders) {
+      world.contactPairsWith(collider, other => {
+        if (touching || !other.parent()?.isKinematic()) return;
+        world.contactPair(collider, other, manifold => { if (manifold.numContacts() > 0) touching = true; });
+      });
+      if (touching) break;
+    }
+    return touching;
+  }
+
+  /**
+   * Lock vertical travel and pitch/roll while in contact with another car.
+   *
+   * Correcting the car's velocity after the solver runs is too late: the
+   * solver has already moved and turned the body inside that step, so a hit
+   * still lifted, sank and rolled it, and cancelling the rotation afterwards
+   * also cancelled the suspension's self-righting and let it tip over. Locking
+   * the axes in the physics engine itself means a car-to-car contact can only
+   * ever push the car along the ground and spin it about its own vertical axis.
+   * The lock lasts only as long as the contact; ride height and suspension are
+   * untouched the rest of the time.
+   */
+  let groundLocked = false;
+  let settleTimer = 0;                  // seconds the hit's slide may keep the attitude lock
+  function setGroundLock(on) {
+    if (on === groundLocked) return;
+    groundLocked = on;
+    // Pitch and roll only. Height is NOT locked: a car being pushed along a
+    // slope has to follow the road, and a locked height left it hovering
+    // half a metre over a downhill. The vertical part of a hit is removed
+    // after the step instead (shapeCarContact), where the suspension keeps
+    // working.
+    body.setEnabledRotations(!on, true, !on, true);
+  }
+
+  /**
+   * The shove from another car, measured, and the tyres' answer to it.
+   *
+   * The shove is read from what the step actually did to the car's velocity,
+   * not from the solver's reported contact impulses: against a kinematic body
+   * those often read zero on exactly the step that did the shoving. Driving
+   * forces over one 1/120 s step are tiny next to a hit, so the velocity change
+   * on a step spent touching another car is the hit.
+   *
+   * `state.carContactDv` hands that shove to the AI, which gives the rival the
+   * same push the other way (equal masses). Then the tyres resist the part of
+   * it that is across the car — cut by the "sideways grip in crashes" setting,
+   * 0% = shoved sideways freely, 100% = the tyres absorb it all — so a hit
+   * mostly moves the car the way its wheels point. The rival still gets the
+   * full shove: the grip is the road pushing back on this car, not less hit.
+   */
+  function shapeCarContact(beforeV, settings) {
+    state.carContactDv = null;
+    if (!groundLocked && !touchingACar()) return;
+    let v = body.linvel();
+    const dvx = v.x - beforeV.x, dvz = v.z - beforeV.z;
+    state.carContactDv = { x: dvx, z: dvz };
+    state.preStepVelocity = { x: beforeV.x, y: beforeV.y, z: beforeV.z };
+
+    // No up or down from a hit. The suspension and gravity change vertical
+    // speed by well under 0.15 m/s in one step; anything beyond that on a step
+    // spent touching another car is the other car, so it is taken back out.
+    // A per-step allowance alone is not enough: a long shove adds it up step
+    // after step until the car is climbing, so rising speed is also capped
+    // outright while another car is touching this one.
+    const dvy = v.y - beforeV.y;
+    const vy = Math.min(beforeV.y + clamp(dvy, -0.15, 0.15), 0.3);
+    if (vy !== v.y) { body.setLinvel({ x: v.x, y: vy, z: v.z }, true); v = body.linvel(); }
+
+    const grip = clamp((settings?.crashSideGrip ?? 75) / 100, 0, 1);
+    if (grip <= 0) return;
+    const q = body.rotation();
+    quaternion.set(q.x, q.y, q.z, q.w);
+    right.set(-1, 0, 0).applyQuaternion(quaternion);
+    const rl = Math.hypot(right.x, right.z) || 1;
+    const rx = right.x / rl, rz = right.z / rl;
+    const sideways = dvx * rx + dvz * rz;
+    body.setLinvel({ x: v.x - rx * sideways * grip, y: v.y, z: v.z - rz * sideways * grip }, true);
+  }
+
+
   /** Clamp how much one solver step may change the body's motion. */
   function limitImpulse(beforeV, maxDeltaV, maxLift, beforeW, maxDeltaW) {
     const v = body.linvel();
@@ -775,6 +882,8 @@ export function createVehicle(world, RAPIER, circuit, options = {}) {
   function reset(pose) {
     const position = pose?.position ?? new THREE.Vector3(0, 2, 0);
     const rotation = pose?.quaternion ?? new THREE.Quaternion();
+    setGroundLock(false);
+    settleTimer = 0;
     body.setTranslation({ x: position.x, y: position.y, z: position.z }, true);
     body.setRotation({ x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w }, true);
     body.setLinvel({ x: 0, y: 0, z: 0 }, true);

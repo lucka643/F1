@@ -34,6 +34,7 @@ export const DEFAULTS = {
   gripLevel: 1,
   suspension: true,
   carCollisions: false,     // off = cars pass through each other
+  crashSideGrip: 75,        // % of a sideways shove the tyres absorb in a car-to-car hit
   frontWing: 6,
   rearWing: 6,
   brakeBias: 58,
@@ -61,6 +62,7 @@ const SCHEMA = {
   tractionControl: { enum: [0, 1, 2], numeric: true },
   steeringSensitivity: { range: [0.4, 1.6], unit: '×' },
   gripLevel: { range: [0.5, 1.8], unit: '×' },
+  crashSideGrip: { range: [0, 100], unit: '%' },
   onScreenControls: { enum: ['auto', 'always', 'never'] },
   frontWing: { range: [1, 11] },
   rearWing: { range: [1, 11] },

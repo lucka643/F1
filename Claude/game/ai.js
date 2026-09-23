@@ -262,6 +262,7 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       slew: 0,              // radians the car is turned across its path
       slewRate: 0,
       recover: 0,           // seconds spent gathering it up again after a hit
+      predicted: 0,         // seconds an impact with the player stays settled
       state: { speedKmh: 0, rpm: 6000 },
     });
   }
@@ -312,6 +313,8 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       traffic.push({ car: null, progress: player.progress, offset: playerState.lateralOffset ?? 0,
         speed: Math.abs(playerState.speed ?? 0) });
     }
+
+    for (const car of cars) if (car.predicted > 0) car.predicted -= h;
 
     // 1. Plan: speed, lateral position and distance for every car.
     for (const car of cars) {
@@ -562,51 +565,114 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
   /**
    * Newton's third law between the player and the field. The rivals are
    * kinematic, so to the physics engine they are immovable: it pushes the
-   * player's car and nothing ever pushes back. After each step, read the
-   * impulse the engine applied at every player-rival contact and give the
-   * rival the same impulse the other way. The cars weigh the same, so a
+   * player's car and nothing ever pushes back. After each step, take the shove
+   * the player's car received from a rival (measured by the vehicle as its
+   * velocity change on a step spent touching one) and give the rival the same
+   * push the other way. The cars weigh the same, so a
    * rear-end shunt now fires the rival forward as hard as a rival shunting you
    * fires you, and a side hit shoves it sideways and slews it.
    */
-  function feelPlayerContact(playerColliders, playerMass, playerState) {
-    if (!contact || !canCollide || !playerColliders?.length || !playerState?.position) return;
+  // The player's car around its centre, for impact detection: its colliders
+  // reach 3.0 m ahead (nose bumper), 2.45 m behind (rear wing) and 1.0 m to
+  // each side. The rival's box reaches 2.85 m ahead and 2.75 m behind.
+  const PLAYER_NOSE = 3.0, PLAYER_TAIL = 2.45, PLAYER_HALF_WIDTH = 1.0;
+  const RIVAL_NOSE = HALF_LENGTH + 0.05, RIVAL_TAIL = HALF_LENGTH - 0.05;
+  const TOUCH_MARGIN = 0.15;
+
+  function feelPlayerContact(playerColliders, playerMass, playerState, playerBody, sideGrip = 0.75) {
+    if (!contact || !canCollide || !playerState?.position) return;
     const p = playerState.position;
+    const vp = playerState.preStepVelocity ?? playerState.velocity ?? { x: 0, z: 0 };
+
     for (const car of cars) {
-      if (!car.collider) continue;
-      let impulse = 0, nx = 0, nz = 0;
-      for (const collider of playerColliders) {
-        world.contactPair(collider, car.collider, (manifold, flipped) => {
-          let sum = 0;
-          for (let i = 0; i < manifold.numContacts(); i++) sum += manifold.contactImpulse(i);
-          if (sum <= 0) return;
-          const n = manifold.normal();
-          const sign = flipped ? -1 : 1;                 // normal from the player to the rival
-          impulse += sum;
-          nx += n.x * sign * sum; nz += n.z * sign * sum;
-        });
-      }
-      if (impulse <= 1e-3) continue;
-      // Horizontal push direction, weighted by where the impulse acted; fall
-      // back to centre-to-centre if the normal is degenerate or points back.
-      const cx = car.root.position.x - p.x, cz = car.root.position.z - p.z;
-      let len = Math.hypot(nx, nz);
-      if (len < 1e-6 || nx * cx + nz * cz < 0) { nx = cx; nz = cz; len = Math.hypot(cx, cz) || 1; }
-      nx /= len; nz /= len;
-      const dv = impulse / playerMass;
+      if (!car.body) continue;
+      const px = p.x - car.root.position.x, pz = p.z - car.root.position.z;
+      if (px * px + pz * pz > 100) continue;
       const fx = Math.sin(car.facing ?? car.yaw ?? 0), fz = Math.cos(car.facing ?? car.yaw ?? 0);
-      const contactAlong = -(cx * fx + cz * fz);          // + = the player is ahead of the rival
-      // Where on the rival it was hit: the player's centre clamped onto the
-      // rival's footprint, in the rival's own frame (along its nose, and to
-      // its left). A push that lands off-centre turns the car as well as
-      // moving it — catch a rear corner and the tail steps out even though you
-      // pushed straight ahead. Spin = (lever x push) / yaw inertia, with an F1
-      // car's inertia m(L^2 + W^2)/12, so it is the car's real response.
-      const a = clamp(-(cx * fx + cz * fz), -HALF_LENGTH, HALF_LENGTH);
-      const b = clamp(-(-cx * fz + cz * fx), -HALF_WIDTH, HALF_WIDTH);
-      const dvf = (nx * fx + nz * fz) * dv, dvl = (-nx * fz + nz * fx) * dv;
-      const spin = (b * dvf - a * dvl) * 12 / ((2 * HALF_LENGTH) ** 2 + (2 * HALF_WIDTH) ** 2);
-      hit(car, nx * dv, nz * dv, contactAlong, PLAYER_KNOCK_MAX, spin);
+      const along = px * fx + pz * fz;                        // player ahead of the rival: +
+      const lateral = -px * fz + pz * fx;                      // player to the rival's left: +
+      // How far apart the two centres can be and still touch, for this
+      // particular pairing of ends: the player's nose or tail (whichever faces
+      // the rival) against the rival's nose or tail.
+      const q = playerState.quaternion;
+      const pfx = 2 * (q.x * q.z + q.w * q.y), pfz = 1 - 2 * (q.x * q.x + q.y * q.y);   // player's forward
+      const playerEnd = (-px * pfx - pz * pfz) > 0 ? PLAYER_NOSE : PLAYER_TAIL;          // rival ahead of the player?
+      const reachAlong = (along > 0 ? RIVAL_NOSE : RIVAL_TAIL) + playerEnd + TOUCH_MARGIN;
+      const reachSide = HALF_WIDTH + PLAYER_HALF_WIDTH + TOUCH_MARGIN;
+      if (Math.abs(along) > reachAlong || Math.abs(lateral) > reachSide) continue;   // not touching
+
+      // Line of impact: the face of the rival that was hit — its tail or nose
+      // for a shunt, its flank for a side-on hit — chosen by which way the
+      // footprints overlap least, as for any two boxes meeting.
+      const endOn = Math.abs(along) / reachAlong >= Math.abs(lateral) / reachSide;
+      const nx = endOn ? Math.sign(along) * fx : Math.sign(lateral) * -fz;   // rival -> player
+      const nz = endOn ? Math.sign(along) * fz : Math.sign(lateral) * fx;
+
+      const a = clamp(along, -HALF_LENGTH, HALF_LENGTH), b = clamp(lateral, -HALF_WIDTH, HALF_WIDTH);
+      // Spin from where the push lands: (lever x push) / yaw inertia, an F1
+      // car's m(L^2 + W^2)/12 — catch a rear corner and the tail steps out.
+      const spinFor = (dvx, dvz) => {
+        const dvf = dvx * fx + dvz * fz, dvl = -dvx * fz + dvz * fx;
+        return (b * dvf - a * dvl) * 12 / ((2 * HALF_LENGTH) ** 2 + (2 * HALF_WIDTH) ** 2);
+      };
+
+      // The first moment of an impact. Two equal masses leave a crash at their
+      // average speed along the line of impact, so both cars are set to that
+      // here, together. Left to the engine, a kinematic rival cannot be slowed
+      // and the player's car may only change speed 16 m/s a step, so a fast
+      // rival drove straight through a stopped car.
+      const vr = velocityOf(car);
+      const closing = (vr.x - vp.x) * nx + (vr.z - vp.z) * nz;   // > 0: coming together
+      if (!(car.predicted > 0) && closing > 0.5) {
+        const half = closing / 2;
+        hit(car, -nx * half, -nz * half, along, 60, spinFor(-nx * half, -nz * half));
+        car.launchDelay = 0;                                   // a car that has been hit is not waiting on the grid
+        if (playerBody) {
+          // The player's half, with the tyres resisting the part across the car.
+          let dvx = nx * half, dvz = nz * half;
+          const q = playerState.quaternion;
+          const rx = -(1 - 2 * (q.y * q.y + q.z * q.z)), rz = -(2 * (q.x * q.z - q.w * q.y));   // car's right
+          const rl = Math.hypot(rx, rz) || 1;
+          const side = (dvx * rx + dvz * rz) / rl;
+          dvx -= (rx / rl) * side * sideGrip; dvz -= (rz / rl) * side * sideGrip;
+          const v = playerBody.linvel();
+          playerBody.setLinvel({ x: vp.x + dvx, y: v.y, z: vp.z + dvz }, true);
+        }
+        car.predicted = 0.25;                                  // settled; for a moment it only pushes
+        continue;
+      }
+
+      // A continuing push (no new impact): equal and opposite to what the
+      // player's car was measured to receive this step.
+      const shove = playerState.carContactDv;
+      if (car.predicted > 0 || !shove) continue;
+      const dvx = -shove.x, dvz = -shove.z;
+      if (Math.hypot(dvx, dvz) < 0.05) continue;
+      hit(car, dvx, dvz, along, PLAYER_KNOCK_MAX, spinFor(dvx, dvz));
     }
+  }
+
+  /**
+   * Is any rival about to touch the player's car? True when a rival's body,
+   * swept by how far the two close in the next two steps, reaches the
+   * player's footprint (up to 3.0 m ahead of its centre, 2.45 m behind, 1.0 m
+   * either side). Used to engage the player's height lock before the impact
+   * rather than one step after it.
+   */
+  function aboutToTouch(playerState, dt = 1 / 120) {
+    if (!contact || !canCollide || !playerState?.position) return false;
+    const p = playerState.position, pv = playerState.velocity ?? { x: 0, z: 0 };
+    for (const car of cars) {
+      if (!car.body) continue;
+      const cx = p.x - car.root.position.x, cz = p.z - car.root.position.z;
+      if (cx * cx + cz * cz > 144) continue;
+      const v = velocityOf(car);
+      const closing = Math.hypot(pv.x - v.x, pv.z - v.z) * dt * 2 + 0.35;
+      const fx = Math.sin(car.facing ?? car.yaw ?? 0), fz = Math.cos(car.facing ?? car.yaw ?? 0);
+      const along = cx * fx + cz * fz, lateral = -cx * fz + cz * fx;
+      if (Math.abs(along) < HALF_LENGTH + 3.0 + closing && Math.abs(lateral) < HALF_WIDTH + 1.0 + closing) return true;
+    }
+    return false;
   }
 
   function separate(a, b) {
@@ -837,8 +903,11 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
       // solver ever saw a contact.
       .setCcdEnabled(true));
     // Same footprint the contact solver uses, sitting at wheel/floor height.
-    car.collider = world.createCollider(RAPIER.ColliderDesc.cuboid(HALF_WIDTH, 0.34, HALF_LENGTH)
-      .setTranslation(0, -0.12, 0.05).setFriction(0.5).setRestitution(0), car.body);
+    // Tall enough to reach from the road to above the player's car, so every
+    // contact lands on a vertical face and pushes horizontally. A box the
+    // height of the car let one nose ride up the other, which launched cars.
+    car.collider = world.createCollider(RAPIER.ColliderDesc.cuboid(HALF_WIDTH, 0.62, HALF_LENGTH)
+      .setTranslation(0, 0.07, 0.05).setFriction(0.5).setRestitution(0), car.body);
   }
   function removeBody(car) {
     if (!car.body) return;
@@ -911,7 +980,7 @@ export function createField(circuit, RAPIER, world, scene, options = {}) {
     cars.length = 0;
   }
 
-  return { cars, root, step, place, go, feelPlayerContact, classification, setCount, setSkill, setWheelAnimation, setCollisions, dispose,
+  return { cars, root, step, place, go, feelPlayerContact, aboutToTouch, classification, setCount, setSkill, setWheelAnimation, setCollisions, dispose,
     get playerProgress() { return player.progress; } };
 }
 
