@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /** Wheel centres in car-local metres, matching the physics model. */
 export const WHEEL_CENTRES = [
@@ -157,6 +158,32 @@ function extractTriangles(source, triangleIndices) {
   if (!geometry.attributes.normal) geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
   return geometry;
+}
+
+/** Merge a group's direct mesh children that share a material and attribute layout. */
+function mergeByMaterial(group) {
+  const buckets = new Map();
+  for (const child of group.children) {
+    if (!child.isMesh) continue;
+    const g = child.geometry;
+    const layout = Object.keys(g.attributes).sort()
+      .map(name => `${name}${g.attributes[name].itemSize}`).join('|') + (g.index ? ':i' : ':n');
+    const key = `${child.material.uuid}#${layout}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(child);
+  }
+  for (const list of buckets.values()) {
+    if (list.length < 2) continue;
+    const merged = mergeGeometries(list.map(mesh => mesh.geometry), false);
+    if (!merged) continue;                            // incompatible after all: leave as is
+    merged.computeBoundingSphere();
+    const mesh = new THREE.Mesh(merged, list[0].material);
+    mesh.castShadow = list[0].castShadow;
+    mesh.receiveShadow = list[0].receiveShadow;
+    mesh.frustumCulled = list[0].frustumCulled;
+    for (const part of list) { group.remove(part); part.geometry.dispose(); }
+    group.add(mesh);
+  }
 }
 
 /**
@@ -575,6 +602,14 @@ function assembleCar(gltf, renderer, { name, scale, origin, centres, quality, wr
 
     geometry.dispose();
   });
+
+  // One draw per material per moving part. The split above leaves a mesh for
+  // every source primitive in every bucket — 24 to 33 per car — and each one
+  // is drawn in the colour pass, the shadow pass and the AO normal pass, for
+  // every car on the grid. Merging parts that share a material and move
+  // together changes nothing on screen and cuts the field's draw calls ~3x.
+  mergeByMaterial(chassis);
+  for (const wheel of wheels) { mergeByMaterial(wheel.spin); mergeByMaterial(wheel.fairing); }
 
   // Release the loader's copy; ours is rebuilt.
   (wrapper ?? gltf.scene).traverse(object => object.geometry?.dispose());

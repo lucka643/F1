@@ -338,12 +338,12 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
     depthWrite: false,
   });
   overlayMaterial.name = 'RoadMarkings';
-  // The overlay reads uv1; swap it onto uv for this material instance.
-  overlayMaterial.onBeforeCompile = shader => {
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <uv_vertex>',
-      '#include <uv_vertex>\n\tvMapUv = ( mapTransform * vec3( uv1, 1 ) ).xy;');
-  };
+  // The overlay is addressed by the second UV set. This used to be done by
+  // patching the shader to read `uv1`, but three only declares that attribute
+  // when a texture asks for channel 1 — so the patched shader never compiled,
+  // and the markings, start line and racing groove silently never drew.
+  // Asking for the channel is the supported way and needs no patch.
+  overlayTexture.channel = 1;
 
   const road = new THREE.Mesh(roadGeometry, roadMaterial);
   road.receiveShadow = true;
@@ -354,6 +354,11 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
   markings.receiveShadow = false;
   markings.renderOrder = 1;
   markings.name = 'RoadMarkings';
+  // Off, deliberately. The markings never actually drew — their shader failed
+  // to compile (fixed above) — so every build Luca has played has bare tarmac.
+  // Turning them on is a visual change he has not asked for; flip this to true
+  // when he does.
+  markings.visible = false;
   root.add(markings);
 
   world.createCollider(
@@ -501,10 +506,10 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
   scenery.name = 'Scenery';
   root.add(scenery);
 
-  let treeMeshes = [];
+  let treeClusters = [];
   try {
-    treeMeshes = await buildTrees(circuit, quality.scenery?.trees ?? 800);
-    for (const mesh of treeMeshes) scenery.add(mesh);
+    treeClusters = await buildTrees(circuit, quality.scenery?.trees ?? 800);
+    for (const cluster of treeClusters) for (const mesh of cluster.parts) scenery.add(mesh);
   } catch (error) {
     console.warn('Trees unavailable:', error.message);
   }
@@ -596,12 +601,25 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
     for (const set of [asphalt, grass, concrete]) {
       for (const texture of Object.values(set)) { texture.anisotropy = aniso; texture.needsUpdate = true; }
     }
-    const budget = preset?.scenery?.trees ?? 800;
+    // The budget used to be spent per mesh, and every tree is three meshes
+    // (branches, leaves, trunk) — so a third of it went on each part, and the
+    // cluster where it ran out got, say, all its branches, some leaves and no
+    // trunks: canopies floating in mid-air. It is now spent per tree, at the
+    // same third, so the forest has exactly the density it always had, whole.
+    const trees = Math.floor((preset?.scenery?.trees ?? 800) / 3);
     let used = 0;
-    for (const mesh of treeMeshes) {
-      const allowed = Math.max(0, Math.min(mesh.userData.total, budget - used));
-      mesh.count = allowed;
-      mesh.visible = allowed > 0;
+    for (const cluster of treeClusters) {
+      const allowed = Math.max(0, Math.min(cluster.total, trees - used));
+      cluster.count = allowed;
+      // A partly-budgeted cluster shows its first `allowed` trees in placement
+      // order, as it always did; each piece shows those of its trees that fall
+      // in that prefix (its trees are stored in placement order).
+      for (const piece of cluster.pieces) {
+        let shown = 0;
+        while (shown < piece.orders.length && piece.orders[shown] < allowed) shown++;
+        for (const mesh of piece.parts) { mesh.count = shown; mesh.visible = shown > 0; }
+        piece.shown = shown;
+      }
       used += allowed;
     }
     const distance = preset?.scenery?.drawDistance ?? 900;
@@ -614,10 +632,13 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
     if (!cameraPosition) return;
     // Bucketed distance culling: each tree cluster carries its own centre, so a
     // whole cluster can be skipped without touching its instances.
-    for (const mesh of treeMeshes) {
-      if (!mesh.userData.centre) continue;
-      cullVector.copy(mesh.userData.centre).sub(cameraPosition);
-      mesh.visible = mesh.count > 0 && cullVector.lengthSq() < (distance + 180) ** 2;
+    for (const cluster of treeClusters) {
+      cullVector.copy(cluster.centre).sub(cameraPosition);
+      const shown = cluster.count > 0 && cullVector.lengthSq() < (distance + 180) ** 2;
+      for (const piece of cluster.pieces) {
+        const on = shown && piece.shown > 0;
+        for (const mesh of piece.parts) mesh.visible = on;
+      }
     }
   }
 
@@ -688,7 +709,8 @@ async function buildTrees(circuit, budget) {
   const clusters = new Map();
   const wanted = Math.max(budget, 120);
   let attempts = 0;
-  while (attempts < wanted * 12 && [...clusters.values()].reduce((n, c) => n + c.length, 0) < wanted) {
+  let placed = 0;                 // running total; re-summing every cluster per attempt was quadratic
+  while (attempts < wanted * 12 && placed < wanted) {
     attempts++;
     const distance = random() * circuit.lapLength;
     const sample = sampleCorridor(circuit, distance);
@@ -700,6 +722,7 @@ async function buildTrees(circuit, budget) {
     const key = `${Math.floor(x / 220)},${Math.floor(z / 220)}`;
     if (!clusters.has(key)) clusters.set(key, []);
     clusters.get(key).push({ x, y: sample.y - 0.25, z, scale: 0.75 + random() * 0.9, yaw: random() * Math.PI * 2 });
+    placed++;
   }
 
   const source = [];
@@ -710,32 +733,54 @@ async function buildTrees(circuit, budget) {
     source.push({ geometry, material: object.material });
   });
 
-  const meshes = [];
+  // A 220 m cluster decides WHICH trees exist (the budget) and when the group
+  // is too far away to draw. But a 220 m block is far bigger than the view:
+  // one that is barely on screen used to draw every tree in it, including the
+  // ones behind the camera — and the shadow pass drew whole blocks straddling
+  // its ±160 m box. Each cluster is therefore drawn as 55 m pieces, which the
+  // renderer culls to the view and the shadow box individually. The trees, and
+  // which of them are shown, are exactly the same; only unseen ones are skipped.
+  const PIECE = 55;
+  const result = [];
   const dummy = new THREE.Object3D();
   for (const placements of clusters.values()) {
     const bucketCentre = placements.reduce(
       (v, p) => v.add(new THREE.Vector3(p.x, p.y, p.z)), new THREE.Vector3())
       .divideScalar(placements.length);
-    for (const { geometry, material } of source) {
-      const mesh = new THREE.InstancedMesh(geometry, material, placements.length);
-      placements.forEach((p, i) => {
-        dummy.position.set(p.x, p.y, p.z);
-        dummy.rotation.set(0, p.yaw, 0);
-        dummy.scale.setScalar((p.scale * 9) / height);
-        dummy.updateMatrix();
-        mesh.setMatrixAt(i, dummy.matrix);
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.userData.total = placements.length;
-      mesh.userData.centre = bucketCentre;
-      mesh.computeBoundingSphere();
-      meshes.push(mesh);
+    const pieces = new Map();
+    placements.forEach((p, order) => {
+      const key = `${Math.floor(p.x / PIECE)},${Math.floor(p.z / PIECE)}`;
+      if (!pieces.has(key)) pieces.set(key, []);
+      pieces.get(key).push({ ...p, order });           // `order` ascending within each piece
+    });
+    // One cluster = one set of trees; its parts (branches, leaves, trunk) are
+    // always shown and budgeted together.
+    const cluster = { parts: [], pieces: [], total: placements.length, count: placements.length, centre: bucketCentre };
+    for (const members of pieces.values()) {
+      const piece = { parts: [], orders: members.map(m => m.order) };
+      for (const { geometry, material } of source) {
+        const mesh = new THREE.InstancedMesh(geometry, material, members.length);
+        members.forEach((p, i) => {
+          dummy.position.set(p.x, p.y, p.z);
+          dummy.rotation.set(0, p.yaw, 0);
+          dummy.scale.setScalar((p.scale * 9) / height);
+          dummy.updateMatrix();
+          mesh.setMatrixAt(i, dummy.matrix);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.computeBoundingSphere();
+        piece.parts.push(mesh);
+        cluster.parts.push(mesh);
+      }
+      cluster.pieces.push(piece);
     }
+    result.push(cluster);
   }
-  return meshes;
+  return result;
 }
+
 
 /** Grandstands near the start/finish straight and marshal posts around the lap. */
 function buildTrackside(circuit, corners, concrete) {

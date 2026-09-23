@@ -17,6 +17,14 @@ import { recomputeFrames } from './roadmesh.js';
  * corridor space without scanning all 643 samples. Cells are sized to the
  * widest corridor so a query only ever inspects a 3x3 neighbourhood.
  */
+/**
+ * Grid cell key. A number rather than a "gx,gz" string: these lookups run
+ * thousands of times a second (every wheel, every AI car, every physics step),
+ * and building and hashing a string for each was the bulk of their cost.
+ * Cells are 20-40 m, so ±32768 cells is ±650 km of reach.
+ */
+const cellKey = (gx, gz) => (gx + 32768) * 65536 + (gz + 32768);
+
 class CentrelineIndex {
   constructor(samples, cellSize = 40) {
     this.samples = samples;
@@ -28,7 +36,7 @@ class CentrelineIndex {
       const reach = Math.ceil((s.width / 2 + 6) / cellSize);
       const gx = Math.floor(s.x / cellSize), gz = Math.floor(s.z / cellSize);
       for (let dx = -reach; dx <= reach; dx++) for (let dz = -reach; dz <= reach; dz++) {
-        const k = `${gx + dx},${gz + dz}`;
+        const k = cellKey(gx + dx, gz + dz);
         let bucket = this.grid.get(k);
         if (!bucket) this.grid.set(k, bucket = []);
         bucket.push(i);
@@ -41,7 +49,9 @@ class CentrelineIndex {
     const gx = Math.floor(x / this.cell), gz = Math.floor(z / this.cell);
     let best = -1, bestD = Infinity;
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
-      for (const i of this.grid.get(`${gx + dx},${gz + dz}`) ?? []) {
+      const bucket = this.grid.get(cellKey(gx + dx, gz + dz));
+      if (!bucket) continue;
+      for (const i of bucket) {
         const s = this.samples[i];
         const d = (s.x - x) ** 2 + (s.z - z) ** 2;
         if (d < bestD) { bestD = d; best = i; }
@@ -79,7 +89,7 @@ class SurfaceIndex {
       const maxZ = Math.max(positions[a + 2], positions[b + 2], positions[c + 2]);
       for (let gx = Math.floor(minX / cellSize); gx <= Math.floor(maxX / cellSize); gx++) {
         for (let gz = Math.floor(minZ / cellSize); gz <= Math.floor(maxZ / cellSize); gz++) {
-          const k = `${gx},${gz}`;
+          const k = cellKey(gx, gz);
           let bucket = this.grid.get(k);
           if (!bucket) this.grid.set(k, bucket = []);
           bucket.push(t);
@@ -95,7 +105,7 @@ class SurfaceIndex {
    * areas do overlap in plan view.
    */
   heightAt(x, z, nearY = null) {
-    const bucket = this.grid.get(`${Math.floor(x / this.cell)},${Math.floor(z / this.cell)}`);
+    const bucket = this.grid.get(cellKey(Math.floor(x / this.cell), Math.floor(z / this.cell)));
     if (!bucket) return null;
     const p = this.positions, idx = this.indices;
     let best = null, bestDelta = Infinity;

@@ -29,7 +29,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
@@ -240,6 +240,45 @@ const GradeShader = {
     }`,
 };
 
+/**
+ * Keep a copy of the scene's depth for the temporal resolve.
+ *
+ * The composer ping-pongs between two targets, and the render pass writes the
+ * scene (with its depth) into one of them. Two swaps later the output pass
+ * renders a full-screen quad into that same target, and the renderer's
+ * auto-clear wipes its depth. The resolve used to read that wiped buffer, so it
+ * reconstructed every pixel as if it sat on the near plane: while driving, the
+ * reprojection threw the history away and the image was just the jittered
+ * frame — softer and shimmering. This pass, run straight after the scene
+ * render, copies depth somewhere nothing else writes.
+ */
+class DepthCapturePass extends Pass {
+  constructor(target) {
+    super();
+    this.needsSwap = false;
+    this.target = target;
+    this.material = new THREE.ShaderMaterial({
+      uniforms: { tDepth: { value: null } },
+      vertexShader: /* glsl */`
+        varying vec2 vUv;
+        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`,
+      fragmentShader: /* glsl */`
+        precision highp float;
+        uniform sampler2D tDepth;
+        varying vec2 vUv;
+        void main() { gl_FragColor = vec4( texture2D( tDepth, vUv ).x, 0.0, 0.0, 1.0 ); }`,
+      depthTest: false, depthWrite: false,
+    });
+    this.quad = new FullScreenQuad(this.material);
+  }
+  render(renderer, writeBuffer, readBuffer) {
+    this.material.uniforms.tDepth.value = readBuffer.depthTexture;
+    renderer.setRenderTarget(this.target);
+    this.quad.render(renderer);
+  }
+  dispose() { this.material.dispose(); this.quad.dispose(); }
+}
+
 /* ───────────────────────────── time of day ───────────────────────────── */
 
 const TIME_OF_DAY = {
@@ -344,6 +383,13 @@ export function createPipeline(renderer, scene, camera, options = {}) {
   let sceneTarget = makeTarget(1, 1, true);
   let historyTarget = makeTarget(1, 1);
   let resolveTarget = makeTarget(1, 1);
+  // Scene depth for the resolve, full float so the 24-bit depth survives.
+  const depthCopyTarget = new THREE.WebGLRenderTarget(1, 1, {
+    type: THREE.FloatType, format: THREE.RedFormat,
+    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    depthBuffer: false, stencilBuffer: false,
+  });
+  let depthPass = null;
 
   let composer = null;
   let renderPass = null;
@@ -369,9 +415,6 @@ export function createPipeline(renderer, scene, camera, options = {}) {
   // Kept as plain objects so the rest of the file reads the same way.
   const temporalPass = { uniforms: temporalMaterial.uniforms };
   const gradePass = { uniforms: gradeMaterial.uniforms };
-  const copyQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial());
-  const copyScene = new THREE.Scene().add(copyQuad);
-  const copyCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
   /* ------------------------------------------------------------ jitter */
 
@@ -402,6 +445,10 @@ export function createPipeline(renderer, scene, camera, options = {}) {
 
     renderPass = new RenderPass(scene, camera);
     composer.addPass(renderPass);
+    if (preset.aa === 'taa' || preset.aa === 'taau') {
+      depthPass = new DepthCapturePass(depthCopyTarget);
+      composer.addPass(depthPass);
+    }
 
     if (preset.ao) {
       aoPass = new GTAOPass(scene, camera, Math.max(1, width), Math.max(1, height));
@@ -442,7 +489,7 @@ export function createPipeline(renderer, scene, camera, options = {}) {
     composer.renderTarget1?.dispose();
     composer.renderTarget2?.dispose();
     composer = null;
-    renderPass = aoPass = bloomPass = outputPass = fxaaPass = null;
+    renderPass = aoPass = bloomPass = outputPass = fxaaPass = depthPass = null;
   }
 
   /* ---------------------------------------------------------- public */
@@ -508,6 +555,7 @@ export function createPipeline(renderer, scene, camera, options = {}) {
     sceneTarget.depthTexture.type = THREE.UnsignedIntType;
     historyTarget.setSize(outputWidth, outputHeight);
     resolveTarget.setSize(outputWidth, outputHeight);
+    depthCopyTarget.setSize(renderWidth, renderHeight);
 
     composer?.setSize(renderWidth, renderHeight);
     aoPass?.setSize?.(renderWidth, renderHeight);
@@ -589,8 +637,7 @@ export function createPipeline(renderer, scene, camera, options = {}) {
       composer.renderToScreen = false;
       composer.render(dt);
       source = composer.readBuffer;                 // ping-pong: holds the finished frame
-      temporalPass.uniforms.tDepth.value =
-        source.depthTexture ?? composer.renderTarget1.depthTexture ?? sceneTarget.depthTexture;
+      temporalPass.uniforms.tDepth.value = depthPass ? depthCopyTarget.texture : sceneTarget.depthTexture;
     } else {
       renderer.setRenderTarget(sceneTarget);
       renderer.clear();
@@ -613,17 +660,15 @@ export function createPipeline(renderer, scene, camera, options = {}) {
     renderer.clear();
     temporalQuad.render(renderer);
 
-    // Keep the resolve as next frame's history.
-    copyQuad.material.map = resolveTarget.texture;
-    copyQuad.material.needsUpdate = true;
-    renderer.setRenderTarget(historyTarget);
-    renderer.render(copyScene, copyCamera);
-
     /* --- grade to screen --- */
     gradePass.uniforms.tDiffuse.value = resolveTarget.texture;
     gradePass.uniforms.time.value = frame * 0.017;
     renderer.setRenderTarget(null);
     gradeQuad.render(renderer);
+
+    // This frame's resolve becomes next frame's history by swapping the two
+    // targets, instead of copying a full output-resolution image every frame.
+    [historyTarget, resolveTarget] = [resolveTarget, historyTarget];
 
     previousViewProjection.copy(currentViewProjection);
     historyValid = true;
@@ -646,8 +691,7 @@ export function createPipeline(renderer, scene, camera, options = {}) {
     gradeQuad.dispose();
     temporalMaterial.dispose();
     gradeMaterial.dispose();
-    copyQuad.geometry.dispose();
-    copyQuad.material.dispose();
+    depthCopyTarget.dispose();
     environmentTexture?.dispose();
     pmrem.dispose();
     scene.remove(sky, sun, sun.target, ambient);

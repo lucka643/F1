@@ -63,6 +63,22 @@ export function createHUD(circuit, options = {}) {
     cache[key] = value;
     node[prop] = value;
   };
+  // Bar widths change every frame while driving; writing an inline style
+  // invalidates style for the element even when the value is unchanged, so
+  // round to a tenth of a percent (well below a pixel) and skip repeats.
+  const setWidth = (node, fraction) => {
+    const value = `${(Math.round(Math.max(0, Math.min(1, fraction)) * 1000) / 10)}%`;
+    const key = `${node.id}:width`;
+    if (cache[key] === value) return;
+    cache[key] = value;
+    node.style.width = value;
+  };
+  const setHidden = (node, hidden) => {
+    const key = `${node.id}:hidden`;
+    if (cache[key] === hidden) return;
+    cache[key] = hidden;
+    node.hidden = hidden;
+  };
   const toggleClass = (node, name, on) => {
     const key = `${node.id}:${name}`;
     if (cache[key] === on) return;
@@ -174,6 +190,7 @@ export function createHUD(circuit, options = {}) {
   /* ----------------------------------------------------------- update */
 
   const SECTOR_CLASSES = ['purple', 'green', 'yellow'];
+  let litShown = -1;
 
   function update(frame) {
     const { vehicle, timing, race, minimapRivals, showFPS, stats } = frame;
@@ -182,17 +199,17 @@ export function createHUD(circuit, options = {}) {
     write(el.speed, String(Math.round(Math.abs(vehicle.speedKmh))));
     write(el.gear, vehicle.gear < 0 ? 'R' : vehicle.gear === 0 ? 'N' : String(vehicle.gear));
     const revs = Math.max(0, Math.min(1, vehicle.rpm / options.revLimit));
-    write(el.rpm, `${(revs * 100).toFixed(1)}%`, 'style.width');
-    el.rpm.style.width = `${revs * 100}%`;
-    el.throttle.style.width = `${vehicle.throttle * 100}%`;
-    el.brake.style.width = `${vehicle.brake * 100}%`;
+    setWidth(el.rpm, revs);
+    setWidth(el.throttle, vehicle.throttle);
+    setWidth(el.brake, vehicle.brake);
 
     // Shift lights: the last 22% of the rev range, then a full-white flash at
     // the limiter — the cue a real driver actually shifts on.
     const shiftBand = Math.max(0, (revs - 0.78) / 0.22);
     const lit = Math.round(shiftBand * lights.length);
-    for (let i = 0; i < lights.length; i++) {
-      lights[i].classList.toggle('on', i < lit);
+    if (lit !== litShown) {
+      litShown = lit;
+      for (let i = 0; i < lights.length; i++) lights[i].classList.toggle('on', i < lit);
     }
     toggleClass(el.shiftLights, 'flash', revs > 0.985);
 
@@ -211,7 +228,7 @@ export function createHUD(circuit, options = {}) {
         for (const cls of SECTOR_CLASSES) toggleClass(node, cls, state === cls);
       });
       const hasDelta = Number.isFinite(timing.delta) && timing.bestLap > 0;
-      el.delta.hidden = !hasDelta;
+      setHidden(el.delta, !hasDelta);
       if (hasDelta) {
         write(el.deltaValue, formatDelta(timing.delta));
         toggleClass(el.delta, 'ahead', timing.delta < 0);
@@ -221,19 +238,19 @@ export function createHUD(circuit, options = {}) {
 
     // Race position.
     if (race?.classification?.length) {
-      el.positionBlock.hidden = false;
+      setHidden(el.positionBlock, false);
       write(el.posNow, String(race.position));
       write(el.posTotal, String(race.classification.length));
       write(el.gapAhead, race.gapAhead === null ? '— leader' : `▲ ${formatGap(race.gapAhead)}`);
       write(el.gapBehind, race.gapBehind === null ? '—' : `▼ ${formatGap(race.gapBehind)}`);
     } else {
-      el.positionBlock.hidden = true;
+      setHidden(el.positionBlock, true);
     }
 
     setFlags(frame.flags ?? []);
     drawMinimap(vehicle.lapDistance ?? 0, minimapRivals);
 
-    el.fps.hidden = !showFPS;
+    setHidden(el.fps, !showFPS);
     if (showFPS && stats) {
       write(el.fps, stats);
     }

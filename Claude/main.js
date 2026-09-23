@@ -514,6 +514,7 @@ function closeSettings() {
 
 let previousTime = performance.now();
 let accumulator = 0;
+const pendingShift = { up: false, down: false };
 let fpsAccumulator = 0;
 let fpsFrames = 0;
 let fpsValue = 0;
@@ -554,10 +555,22 @@ function frame(now) {
     // The AI steps inside the same fixed loop as the car, so its physics
     // bodies move smoothly and contact with the player is solid every step.
     accumulator = holding ? 0 : Math.min(accumulator + delta, PHYSICS_STEP * MAX_STEPS_PER_FRAME);
+
+    // Gear shifts are one-shot presses, sampled once per frame, but physics
+    // runs 0-8 steps per frame. On a 120-165 Hz display many frames run no
+    // step at all, and a shift pressed on one of those was simply lost. Hold
+    // each press until exactly one physics step has seen it.
+    if (inputState.shiftUp) pendingShift.up = true;
+    if (inputState.shiftDown) pendingShift.down = true;
+    if (holding) pendingShift.up = pendingShift.down = false;
+
     let steps = 0;
     while (accumulator >= PHYSICS_STEP && steps < MAX_STEPS_PER_FRAME) {
+      inputState.shiftUp = pendingShift.up;
+      inputState.shiftDown = pendingShift.down;
       game.field?.step(PHYSICS_STEP, game.vehicle.state);
       game.vehicle.step(PHYSICS_STEP, inputState, settings);
+      pendingShift.up = pendingShift.down = false;
       accumulator -= PHYSICS_STEP;
       steps++;
     }

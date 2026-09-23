@@ -188,7 +188,7 @@ export function createAudio(options = {}) {
     osc2.connect(mix2).connect(filter);
     filter.connect(gain).connect(panner).connect(nodes.out);
     osc1.start(); osc2.start();
-    return { osc1, osc2, filter, gain, panner };
+    return { osc1, osc2, filter, gain, panner, connected: true, silentFor: 0 };
   }
 
   function dropRivalVoice(voice) {
@@ -213,8 +213,12 @@ export function createAudio(options = {}) {
     }
   }
 
-  function updateRivals(rivals, camera, state) {
-    const present = new Set(rivals ?? []);
+  // Scratch set, reused so the per-frame membership check allocates nothing.
+  const present = new Set();
+
+  function updateRivals(rivals, camera, state, dt = 1 / 60) {
+    present.clear();
+    for (const car of rivals ?? []) present.add(car);
     for (const [car, voice] of rivalVoices) {
       if (!present.has(car)) { dropRivalVoice(voice); rivalVoices.delete(car); }
     }
@@ -229,6 +233,26 @@ export function createAudio(options = {}) {
       const cp = car.root.position;
       const dx = lp.x - cp.x, dy = lp.y - cp.y, dz = lp.z - cp.z;
       const dist = Math.hypot(dx, dy, dz) || 1;
+
+      // Out of earshot: fade to silence, then unhook the voice from the mix.
+      // Web Audio only renders what is connected to the output, so a parked
+      // voice costs nothing on the audio thread, and it needs no automation
+      // either — most of a large field is out of earshot most of the lap.
+      if (dist > RIVAL_AUDIBLE) {
+        if (voice.connected) {
+          if (voice.silentFor === 0) voice.gain.gain.setTargetAtTime(0, now, 0.06);
+          voice.silentFor += dt;
+          if (voice.silentFor > 0.5) { voice.filter.disconnect(); voice.connected = false; }
+        }
+        continue;
+      }
+      voice.silentFor = 0;
+      if (!voice.connected) {
+        voice.gain.gain.cancelScheduledValues(now);
+        voice.gain.gain.setValueAtTime(0, now);
+        voice.filter.connect(voice.gain);
+        voice.connected = true;
+      }
       voice.panner.positionX.setTargetAtTime(cp.x, now, 0.02);
       voice.panner.positionY.setTargetAtTime(cp.y, now, 0.02);
       voice.panner.positionZ.setTargetAtTime(cp.z, now, 0.02);
@@ -243,7 +267,7 @@ export function createAudio(options = {}) {
       voice.osc2.frequency.setTargetAtTime(clamp(firing * 2 * doppler, 30, 12000), now, 0.03);
       const throttle = car.state.throttle ?? 0.5;
       voice.filter.frequency.setTargetAtTime(900 + throttle * 2600, now, 0.05);
-      const level = dist > RIVAL_AUDIBLE ? 0 : (0.05 + 0.07 * throttle) * engineLevel;
+      const level = (0.05 + 0.07 * throttle) * engineLevel;
       voice.gain.gain.setTargetAtTime(level, now, 0.06);
     }
   }
@@ -343,7 +367,7 @@ export function createAudio(options = {}) {
 
     nodes.out.gain.setTargetAtTime(master, now, 0.08);
 
-    updateRivals(rivals, camera, state);
+    updateRivals(rivals, camera, state, dt);
   }
 
   return {
