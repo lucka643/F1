@@ -565,7 +565,15 @@ function frame(now) {
     updateRace();
     if (!holding) game.timing.update(delta, game.vehicle.state.lapDistance, !game.vehicle.state.offTrack);
 
-    if (game.race.totalLaps > 0 && game.timing.state.lap > game.race.totalLaps) {
+    // Finish on laps actually COMPLETED, never on the lap counter, which can
+    // be moved by a re-seed after a teleport; and never in the first seconds
+    // of a race, because a race that ends as the lights go green is always a
+    // bug rather than a result.
+    if (game.race.totalLaps > 0
+        && game.timing.state.lapCount >= game.race.totalLaps
+        && game.timing.state.sessionTime > 5) {
+      console.info(`Race over: ${game.timing.state.lapCount}/${game.race.totalLaps} laps ` +
+        `after ${game.timing.state.sessionTime.toFixed(1)} s`);
       showResults();
     }
   } else {

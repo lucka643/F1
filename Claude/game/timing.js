@@ -224,6 +224,7 @@ export function createTiming(circuit, options = {}) {
   let prevDistance = 0;
   let lapProgress = 0;           // metres since the last S/F crossing
   let offTrackTime = 0;
+  let reseeded = false;             // a teleport re-seed is pending a clean lap start
   let onTrackTime = 0;
   let sessionDistance = 0;
   let deltaShown = 0;
@@ -517,6 +518,14 @@ export function createTiming(circuit, options = {}) {
     }
     current.colour = colour;
 
+    if (reseeded) {
+      // This "lap" is the tail of one interrupted by a re-seed: start a clean
+      // one rather than crediting a lap that was never driven.
+      reseeded = false;
+      beginLap(atTime);
+      return;
+    }
+
     laps.push(current);
     while (laps.length > config.keepLaps) laps.shift();
 
@@ -672,6 +681,11 @@ export function createTiming(circuit, options = {}) {
     const teleport = Math.max(config.teleportMetres, 120 * dt);
     if (Math.abs(step) > teleport) {
       lapProgress = progressNow;
+      // Re-seeding drops the car anywhere in the lap — including a few metres
+      // before the line, where the next crossing would otherwise be credited
+      // as a complete lap seconds after the start. The next crossing restarts
+      // the lap instead of completing it.
+      reseeded = true;
       if (armed) invalidateHard('reset');
       emit('teleport', { lapDistance, step });
       step = 0;
@@ -823,6 +837,7 @@ export function createTiming(circuit, options = {}) {
     clock = 0;
     started = false;
     armed = false;
+    reseeded = false;
     lapProgress = 0;
     prevDistance = 0;
     offTrackTime = 0;
