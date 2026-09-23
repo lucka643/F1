@@ -174,7 +174,8 @@ function detectCorners(circuit, { minRadius = 260, minLength = 22 } = {}) {
  *
  * @param profile  cross-section as [{ across, up, u }] in metres, left to right
  */
-function ribbon(circuit, fromDistance, toDistance, side, inset, profile, step = 3) {
+function ribbon(circuit, fromDistance, toDistance, side, inset, profile, step = 3,
+                { anchor = 'centre', faceUp = true } = {}) {
   const positions = [];
   const normals = [];
   const uvs = [];
@@ -186,11 +187,15 @@ function ribbon(circuit, fromDistance, toDistance, side, inset, profile, step = 
     const distance = fromDistance + (span * r) / rings;
     const sample = sampleCorridor(circuit, distance);
     const edge = side * (sample.width / 2 - inset);
+    // Heights from the road's actual edge, not the centreline: the road leans
+    // and climbs across its width, and hanging the verge and kerbs off the
+    // centre height left them up to 1.8 m above or below the tarmac.
+    const base = anchor === 'edge' ? edgeHeight(circuit, sample, side) : sample.y;
     for (const point of profile) {
       const across = edge + side * point.across;
       positions.push(
         sample.x + sample.nx * across,
-        sample.y + point.up,
+        base + point.up,
         sample.z + sample.nz * across);
       normals.push(0, 1, 0);
       uvs.push(point.u, distance * 0.35);
@@ -203,6 +208,90 @@ function ribbon(circuit, fromDistance, toDistance, side, inset, profile, step = 
       indices.push(a, d, b, b, d, e);
     }
   }
+  if (faceUp) orientUp(positions, indices);
+  return { positions, normals, uvs, indices };
+}
+
+/**
+ * Wind every triangle to face up. A ribbon mirrored to the other side of the
+ * road comes out wound the other way, and a single-sided material culls those:
+ * one side's grass and kerbs were invisible — you saw the ground plane a metre
+ * below instead, while the (double-sided) collider was still there, so the car
+ * drove on thin air until the strip ended and it fell through.
+ */
+function orientUp(positions, indices) {
+  for (let t = 0; t < indices.length; t += 3) {
+    const a = indices[t] * 3, b = indices[t + 1] * 3, c = indices[t + 2] * 3;
+    const ny = (positions[b + 2] - positions[a + 2]) * (positions[c] - positions[a])
+             - (positions[b] - positions[a]) * (positions[c + 2] - positions[a + 2]);
+    if (ny < 0) { const swap = indices[t + 1]; indices[t + 1] = indices[t + 2]; indices[t + 2] = swap; }
+  }
+}
+
+/** Height of the tarmac at the corridor edge on one side (probing inward if the edge is just off it). */
+function edgeHeight(circuit, sample, side) {
+  const edge = sample.width / 2;
+  for (let t = 0; t <= 1.5; t += 0.1) {
+    const across = side * (edge - t);
+    const y = circuit.heightAt(sample.x + sample.nx * across, sample.z + sample.nz * across, sample.y);
+    if (y !== null) return y;
+  }
+  return sample.y;
+}
+
+/**
+ * The ground beside the road, as a height at a distance from the road edge:
+ * level with the tarmac out past the barriers, then an embankment down to the
+ * surrounding ground. Used for the verge mesh and to stand the trees on it.
+ */
+const GROUND_LEVEL = -1.2;
+function terrainHeight(edgeY, fromEdge) {
+  const level = edgeY - 0.10;
+  const floor = GROUND_LEVEL + 0.02;
+  if (fromEdge <= 0) return edgeY - 0.03;
+  if (fromEdge <= 3) return edgeY - 0.03 - (0.02 * fromEdge) / 3;
+  if (fromEdge <= 13) return edgeY - 0.05 - (0.05 * (fromEdge - 3)) / 10;
+  if (level <= floor) return Math.max(floor, level);
+  if (fromEdge >= 30) return floor;
+  const t = (fromEdge - 13) / 17;
+  return level + (floor - level) * (t * t * (3 - 2 * t));    // eased embankment
+}
+
+/**
+ * One side's verge: from just under the road edge, level with it out past the
+ * barriers, then down an embankment to the ground. It never covers another
+ * stretch of road — where the track passes close to itself, grass that would
+ * sit on or just above that road is kept underneath it.
+ */
+function vergeStrip(circuit, side, step = 6) {
+  const ACROSS = [-0.6, 0, 3, 8, 13, 17, 21, 25, 30];
+  const positions = [], normals = [], uvs = [], indices = [];
+  const rings = Math.max(2, Math.ceil(circuit.lapLength / step));
+  for (let r = 0; r <= rings; r++) {
+    const distance = (circuit.lapLength * r) / rings;
+    const sample = sampleCorridor(circuit, distance);
+    const edgeY = edgeHeight(circuit, sample, side);
+    for (const fromEdge of ACROSS) {
+      const across = side * (sample.width / 2 + fromEdge);
+      const x = sample.x + sample.nx * across, z = sample.z + sample.nz * across;
+      let y = terrainHeight(edgeY, fromEdge);
+      if (fromEdge >= 1) {
+        const road = circuit.heightAt(x, z, y);
+        if (road !== null && road < y + 0.4) y = Math.min(y, road - 0.35);
+      }
+      positions.push(x, y, z);
+      normals.push(0, 1, 0);
+      uvs.push(fromEdge * 0.3, distance * 0.35);
+    }
+  }
+  const stride = ACROSS.length;
+  for (let r = 0; r < rings; r++) {
+    for (let c = 0; c < stride - 1; c++) {
+      const a = r * stride + c, b = a + 1, d = a + stride, e = d + 1;
+      indices.push(a, d, b, b, d, e);
+    }
+  }
+  orientUp(positions, indices);
   return { positions, normals, uvs, indices };
 }
 
@@ -381,7 +470,7 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
     const side = corner.direction > 0 ? 1 : -1;
     const from = corner.entry - 8;
     const to = corner.exit + 14;
-    kerbChunks.push(ribbon(circuit, from, to, side, 0.1, KERB_PROFILE, 2.5));
+    kerbChunks.push(ribbon(circuit, from, to, side, 0.1, KERB_PROFILE, 2.5, { anchor: 'edge' }));
 
     const span = ((to - from) % circuit.lapLength + circuit.lapLength) % circuit.lapLength;
     const segments = Math.max(2, Math.round(span / 4));
@@ -391,7 +480,7 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
       const yaw = Math.atan2(sample.tx, sample.tz);
       kerbColliders.push(
         RAPIER.ColliderDesc.cuboid(0.85, 0.035, span / segments / 2)
-          .setTranslation(sample.x + sample.nx * across, sample.y + 0.035, sample.z + sample.nz * across)
+          .setTranslation(sample.x + sample.nx * across, edgeHeight(circuit, sample, side) + 0.035, sample.z + sample.nz * across)
           .setRotation(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw))
           .setFriction(0.92));
     }
@@ -419,7 +508,8 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
   const barrierChunks = [];
   const BARRIER_SETBACK = -12.0;     // negative = outside the corridor edge
   for (const side of [1, -1]) {
-    barrierChunks.push(ribbon(circuit, 0, circuit.lapLength - 0.01, side, BARRIER_SETBACK, BARRIER_PROFILE, 6));
+    barrierChunks.push(ribbon(circuit, 0, circuit.lapLength - 0.01, side, BARRIER_SETBACK, BARRIER_PROFILE, 6,
+      { anchor: 'edge', faceUp: false }));
   }
   const barrierMaterial = new THREE.MeshStandardMaterial({
     ...concrete, color: 0xcdd2d6, roughness: 0.8, metalness: 0.05,
@@ -442,7 +532,7 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
       const yaw = Math.atan2(sample.tx, sample.tz);
       world.createCollider(
         RAPIER.ColliderDesc.cuboid(0.22, 0.72, barrierStep / 2 + 0.15)
-          .setTranslation(sample.x + sample.nx * across, sample.y + 0.62, sample.z + sample.nz * across)
+          .setTranslation(sample.x + sample.nx * across, edgeHeight(circuit, sample, side) + 0.62, sample.z + sample.nz * across)
           .setRotation(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw))
           .setFriction(0.32).setRestitution(0.08));
     }
@@ -450,15 +540,8 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
 
   /* ------------------------------------------------- verges and ground */
 
-  const VERGE_PROFILE = [
-    { across:  0.0, up: -0.02, u: 0 },
-    { across:  3.0, up: -0.06, u: 1 },
-    { across: 13.0, up: -0.20, u: 4 },
-  ];
   const vergeChunks = [];
-  for (const side of [1, -1]) {
-    vergeChunks.push(ribbon(circuit, 0, circuit.lapLength - 0.01, side, 0, VERGE_PROFILE, 6));
-  }
+  for (const side of [1, -1]) vergeChunks.push(vergeStrip(circuit, side));
   const grassMaterial = new THREE.MeshStandardMaterial({
     ...grass, color: 0x7f9163, roughness: 1, metalness: 0, envMapIntensity: 0.5,
   });
@@ -493,7 +576,7 @@ export async function buildCircuit(scene, world, RAPIER, options = {}) {
     new THREE.PlaneGeometry(9000, 9000, 1, 1),
     new THREE.MeshStandardMaterial({ ...groundTextures, color: 0x74855b, roughness: 1, envMapIntensity: 0.45 }));
   ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -1.2;
+  ground.position.y = GROUND_LEVEL;
   ground.receiveShadow = true;
   ground.name = 'Ground';
   root.add(ground);
@@ -721,7 +804,11 @@ async function buildTrees(circuit, budget) {
     if (circuit.heightAt(x, z) !== null) continue;        // would be on the road
     const key = `${Math.floor(x / 220)},${Math.floor(z / 220)}`;
     if (!clusters.has(key)) clusters.set(key, []);
-    clusters.get(key).push({ x, y: sample.y - 0.25, z, scale: 0.75 + random() * 0.9, yaw: random() * Math.PI * 2 });
+    // Stand the tree on the ground at that distance from the road edge — the
+    // verge, the embankment or the flat beyond — instead of at a fixed height
+    // under the centreline, which left trees floating over the embankment.
+    const groundY = terrainHeight(edgeHeight(circuit, sample, side), Math.abs(across) - sample.width / 2);
+    clusters.get(key).push({ x, y: groundY - 0.15, z, scale: 0.75 + random() * 0.9, yaw: random() * Math.PI * 2 });
     placed++;
   }
 
